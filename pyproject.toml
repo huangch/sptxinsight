@@ -1,0 +1,92 @@
+[build-system]
+requires = ["setuptools<67", "setuptools_scm[toml]>=8", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sptxinsight"
+description = "Run cell-typing and spatial-heterogeneity analysis on spatial transcriptomics."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache License, Version 2.0" }
+authors = [
+  { name = "sptxinsight Team" },
+]
+maintainers = [
+  { name = "sptxinsight Team" },
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+# Deliberately lightweight: the vendored H-Plot engine needs only the numeric /
+# graph stack, NOT torch / tensorflow / openslide. Keep it that way.
+#
+# Version bounds are chosen so sptxinsight is CO-INSTALLABLE in the shared
+# `wsinsight` conda env, whose locked set (constraints.txt) pins numpy<2,
+# zarr<3 and the 2025.9 generation of fsspec/s3fs/gcsfs. The upper caps below
+# stop a plain `pip install` from silently upgrading those and breaking
+# wsinsight's tiffslide / large-image / histomicstk stack. In a shared env,
+# prefer:  pip install --no-deps -e .   (every runtime dep is already present).
+dependencies = [
+  "click>=8.0,<9,!=8.1.4,!=8.1.5",
+  "anndata",
+  "numpy<2.0.0",
+  "pandas>=2.0",
+  "scipy>=1.10",
+  "h5py",
+  "tqdm",
+
+  # Storage / cloud I/O (URIPath). Capped to the wsinsight 2025.9 generation;
+  # the 2026.x line pulls zarr>=3 and breaks wsinsight's zarr<3 readers.
+  "fsspec>=2023.1.0,<2026",
+  "requests>=2.28,<3",
+  "s3fs<2026",
+  "gcsfs<2026",
+  "platformdirs",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+# Co-installable with the wsinsight env (zarr<3). anndata.read_zarr works with
+# zarr 2.x, so the H-Plot path does not need zarr 3.
+zarr = [
+  "zarr<3",
+]
+# WARNING: spatialdata / squidpy / scanpy require numpy>=2 and zarr>=3, which
+# are INCOMPATIBLE with the shared wsinsight env (numpy<2, zarr<3). Install
+# these extras only in a dedicated sptxinsight-only environment.
+spatialdata = [
+  "spatialdata",
+]
+scanpy = [
+  "scanpy",
+]
+mcp = [
+  "fastmcp>=2.0",
+]
+
+[project.urls]
+Repository = "https://github.com/huangch/sptxinsight"
+BugTracker = "https://github.com/huangch/sptxinsight/issues"
+
+[project.scripts]
+sptxinsight = "sptxinsight.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["sptxinsight*"]
+
+[tool.setuptools.package-data]
+sptxinsight = ["py.typed"]
+
+[tool.setuptools_scm]
+write_to = "sptxinsight/_version.py"
+fallback_version = "0.1.0"

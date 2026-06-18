@@ -1,0 +1,1 @@
+"""sptxinsight command-line interface."""
