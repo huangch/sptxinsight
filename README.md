@@ -10,11 +10,34 @@ reuses WSInsight's H-Plot engine (vendored under `sptxinsight.insightlib`) but
 needs **none** of the heavy perception stack (no torch / tensorflow /
 openslide).
 
+- **Python:** 3.11+
+- **License:** Apache-2.0
+- **Status:** Alpha
+
 ## Install
+
+Standalone:
 
 ```bash
 pip install -e .
 ```
+
+Inside the shared `wsinsight` conda environment, install without dependencies so
+`pip` cannot upgrade the locked `numpy<2` / `zarr<3` / `fsspec` generation that
+WSInsight depends on (every runtime dependency is already present there):
+
+```bash
+pip install --no-deps -e .
+```
+
+Optional extras (see `pyproject.toml` for compatibility caveats):
+
+| Extra | Adds | Note |
+|---|---|---|
+| `zarr` | `zarr<3` | Read `.zarr` samples in the shared env. |
+| `spatialdata` | `spatialdata` | Needs `numpy>=2`/`zarr>=3` — dedicated env only. |
+| `scanpy` | `scanpy` | Same `numpy>=2` constraint. |
+| `mcp` | `fastmcp>=2.0` | Model Context Protocol server. |
 
 ## CLI
 
@@ -22,14 +45,17 @@ pip install -e .
 sptxinsight --help
 ```
 
+Global options apply before the subcommand: `--backend {anndata,zarr,spatialdata}`
+selects the sample loader and `--log-level` sets logging verbosity.
+
 | Command | Purpose |
 |---|---|
 | `run` | Ingest → adapt → H-Plot, end to end. |
 | `ingest` | Read samples and write the per-sample H-Plot CSV contract. |
 | `annotate` | Verify samples are cell-typed and report per-type counts. |
 | `export` | Print the path to the aggregated H-Plot table. |
-| `describe` | Emit a JSON schema of every subcommand. |
-| `hplot`, `hplot-finalize` | Experimental: run/aggregate H-Plot over ingested CSVs (set `SPTXINSIGHT_EXPERIMENTAL=1`). |
+| `describe` | Emit a JSON schema of every subcommand (for tooling / MCP). |
+| `hplot`, `hplot-finalize` | Experimental: run/aggregate H-Plot over ingested CSVs. Hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
 
 ### Example
 
@@ -100,3 +126,7 @@ results/
   hplot-outputs-csv/hplots/...   # per-sample layer curves
   hplot-outputs.csv              # aggregated, gap-filled layer table
 ```
+
+## License
+
+Apache License, Version 2.0.
