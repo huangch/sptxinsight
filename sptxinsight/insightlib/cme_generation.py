@@ -467,6 +467,8 @@ def prepare_slide_graph(
     mode: str = "hard",
     use_expression: bool = False,
     feature_source: str = "celltype",
+    expr_pca=None,
+    expr_pca_cols: Optional[List[str]] = None,
 ) -> Dict[str, np.ndarray]:
     """Build one sample graph.
 
@@ -479,6 +481,10 @@ def prepare_slide_graph(
         * ``"expression"`` -> k-hop mean gene expression only (needs ``expr_``).
         * ``"both"``       -> composition concatenated with mean expression.
       The legacy ``use_expression`` flag is treated as ``feature_source="both"``.
+      When ``expr_pca`` (a fitted PCA) is given, the per-cell expression is first
+      projected onto that shared basis (using ``expr_pca_cols`` for a fixed gene
+      order) so the expression feature block carries PC scores instead of raw
+      genes.
 
     Returns: {'X','edge_index','kept_idx','classes','genes','feature_source','edges_df'}.
     """
@@ -532,6 +538,20 @@ def prepare_slide_graph(
                     f"use --cme-mode celltype."
                 )
             # 'both' on a sample without expression: fall back to composition.
+        elif expr_pca is not None:
+            # Project per-cell expression onto the shared PCA basis BEFORE the
+            # k-hop aggregation. ``expr_pca_cols`` fixes the gene order so every
+            # sample is projected with the same components, keeping niches
+            # comparable across the cohort. The feature block then carries PC
+            # scores (pc0..) instead of raw genes; the model df keeps the
+            # interpretable expr_ columns for cme-profile markers.
+            use_cols = expr_pca_cols if expr_pca_cols is not None else expr_cols
+            V = df.reindex(columns=use_cols).to_numpy(dtype=np.float32)
+            V = np.nan_to_num(V)[kept_idx]
+            V = expr_pca.transform(V).astype(np.float32)
+            genes = [f"pc{i}" for i in range(V.shape[1])]
+            X_expr = khop_mean_features(V, edge_index=edge_index, N=N_kept, k=k_hops)
+            blocks.append(X_expr.astype(np.float32))
         else:
             genes = [c[len("expr_"):] for c in expr_cols]
             V = df[expr_cols].to_numpy(dtype=np.float32)
@@ -805,6 +825,51 @@ def _apply_batch_correction(Z_list: List[np.ndarray],
     raise ValueError(f"batch_correct must be none/center/harmony, got {batch_correct!r}")
 
 
+def _fit_expression_pca(model_output_paths: Sequence[Path], n_components: int):
+    """Fit one shared PCA basis on the pooled per-cell expression of a cohort.
+
+    Gene expression (``expr_`` columns) is high-dimensional and highly
+    correlated, so feeding all genes (times the hop count) into the GCN is
+    redundant and noisy. This reduces every cell's expression to a small set of
+    principal components BEFORE the k-hop aggregation. The basis is fit once on
+    the pooled cells of all samples (``IncrementalPCA`` so the full cohort is
+    never held in memory at once) and then applied identically to each sample,
+    which is what keeps the resulting niches comparable across the cohort.
+
+    Returns ``(ipca, expr_cols)`` with ``expr_cols`` fixing the gene order, or
+    ``None`` when PCA is disabled or no sample carries ``expr_`` columns.
+    """
+    if not n_components or n_components < 1:
+        return None
+    from sklearn.decomposition import IncrementalPCA
+
+    expr_cols: Optional[List[str]] = None
+    for p in model_output_paths:
+        cols = sorted(c for c in pd.read_csv(p, nrows=0).columns if c.startswith("expr_"))
+        if cols:
+            expr_cols = cols
+            break
+    if not expr_cols:
+        return None
+
+    n_comp = min(int(n_components), len(expr_cols))
+    ipca = IncrementalPCA(n_components=n_comp)
+    fitted_any = False
+    for p in model_output_paths:
+        head = pd.read_csv(p, nrows=0).columns
+        if not any(c.startswith("expr_") for c in head):
+            continue
+        V = pd.read_csv(p, usecols=expr_cols).reindex(columns=expr_cols).to_numpy(np.float32)
+        V = np.nan_to_num(V)
+        if V.shape[0] < n_comp:  # IncrementalPCA needs >= n_components rows per batch
+            continue
+        ipca.partial_fit(V)
+        fitted_any = True
+    if not fitted_any:
+        return None
+    return ipca, expr_cols
+
+
 # =============================================================================
 # End-to-end multi-sample training + clustering
 # =============================================================================
@@ -831,6 +896,7 @@ def cme_generation(
     use_expression: bool = False,
     cme_mode: str = "celltype",
     batch_correct: str = "none",
+    expression_pca: int = 50,
     overwrite: bool = False,
     slide_mpp_lookup: Mapping[str, float] | None = None,
 ) -> None:
@@ -845,6 +911,9 @@ def cme_generation(
     ``both`` (fused). The legacy ``use_expression`` flag maps to ``both``.
     ``batch_correct`` (``none``/``center``/``harmony``) is applied to the DGI
     embeddings before clustering to remove cross-sample technical shifts.
+    ``expression_pca`` (>0, expression/both modes) reduces the per-cell gene
+    panel to that many shared principal components before the k-hop aggregation;
+    set it to 0 to feed all genes in.
     """
     if use_expression and cme_mode == "celltype":
         cme_mode = "both"
@@ -908,8 +977,12 @@ def cme_generation(
     cme_cells_output_dir.mkdir(exist_ok=True)
     cme_cmes_output_dir = cme_output_dir / "cmes"
     cme_cmes_output_dir.mkdir(exist_ok=True)
-    cme_slide_graph_file = results_dir / f"slide-graphs{mode_spec['ckpt']}.joblib"
-    cme_dgi_embeddings_file = results_dir / f"dgi-embeddings{mode_spec['ckpt']}.joblib"
+    # PCA only reduces expression features; tag the checkpoints so toggling
+    # --disable-pca never silently reuses an incompatible cached graph/embedding.
+    pca_on = cme_mode in ("expression", "both") and bool(expression_pca)
+    pca_tag = f"-pca{int(expression_pca)}" if pca_on else ""
+    cme_slide_graph_file = results_dir / f"slide-graphs{mode_spec['ckpt']}{pca_tag}.joblib"
+    cme_dgi_embeddings_file = results_dir / f"dgi-embeddings{mode_spec['ckpt']}{pca_tag}.joblib"
 
     if overwrite:
         for _ckpt in (cme_slide_graph_file, cme_dgi_embeddings_file):
@@ -930,6 +1003,23 @@ def cme_generation(
         graph_cache_dir = Path(str(results_dir)) / "graphs"
         graph_cache_dir.mkdir(parents=True, exist_ok=True)
 
+        # Fit one shared PCA basis on the pooled cohort expression (expression /
+        # both modes only). Done once, up front, so every sample is projected
+        # with the same components before k-hop aggregation.
+        expr_pca = None
+        expr_pca_cols = None
+        if pca_on:
+            click.secho(f"Fitting shared expression PCA ({int(expression_pca)} comps) "
+                        f"on pooled cohort...", fg="green")
+            fitted = _fit_expression_pca(model_output_paths, int(expression_pca))
+            if fitted is None:
+                click.secho("  No expr_ columns found; continuing without PCA.", fg="yellow")
+            else:
+                expr_pca, expr_pca_cols = fitted
+                evr = float(np.sum(expr_pca.explained_variance_ratio_))
+                click.secho(f"  PCA basis: {expr_pca.n_components_} comps over "
+                            f"{len(expr_pca_cols)} genes (cum. EVR={evr:.3f}).", fg="green")
+
         # Sequential over samples so khop_features' inner process pool is not
         # nested inside an outer one.
         for wsi_path, csv_path in tqdm(list(zip(slide_paths, model_output_paths)),
@@ -949,6 +1039,8 @@ def cme_generation(
                 slide_id=slide_id,
                 mode="soft" if cme_soft_mode else "hard",
                 feature_source=cme_mode,
+                expr_pca=expr_pca,
+                expr_pca_cols=expr_pca_cols,
             )
             slides.append(s)
             if classes is None:

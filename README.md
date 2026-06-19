@@ -136,6 +136,9 @@ sptxinsight cme -o ./results --cme-clusters 8 --cme-k-hops 3 --cme-regions
 
 # Gene-expression niches (k-hop mean expression) instead of cell-type niches:
 sptxinsight cme -o ./results --cme-mode expression --cme-batch-correct center
+
+# Same, but feed every gene to the encoder instead of PCA-reduced expression:
+sptxinsight cme -o ./results --cme-mode expression --disable-pca
 ```
 
 `--cme-mode` selects what drives the niches and namespaces the outputs so the
@@ -150,9 +153,18 @@ families coexist on the same cells:
 Run the command twice (once per mode) to get **parallel** cell-type and gene
 niches on the same cells; `celltype` stays byte-identical to earlier releases.
 
+For `expression`/`both` modes the per-cell gene panel is **reduced to a shared
+set of principal components before the k-hop aggregation** (default
+`--cme-pca-components 50`). The basis is fit once on the pooled cohort and
+applied identically to every sample, which denoises the sparse panel, shrinks
+the encoder input, and keeps niches comparable across samples. Pass
+`--disable-pca` to feed all genes in instead. PCA only affects the encoder
+input — the interpretable `expr_` columns are kept for `cme-profile` markers.
+
 Key options: `--cme-clusters` (KMeans k; omit for an automatic Leiden sweep),
 `--cme-k-hops`, `--cme-max-edge-len-um`, `--cme-soft` (probability instead of
 argmax composition), `--cme-mode` (`celltype`/`expression`/`both`),
+`--cme-pca-components` / `--disable-pca` (shared PCA of expression features),
 `--cme-batch-correct` (`none`/`center`/`harmony` cross-sample correction of the
 embeddings — use a technical unit such as sample/run as the batch, never a
 biological condition), and `--cme-regions` (merge cells into annotation-level

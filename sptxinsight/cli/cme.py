@@ -86,6 +86,14 @@ def _slide_paths_from_results(results_dir: URIPath):
 @click.option("--cme-expression", is_flag=True, default=False, show_default=True,
               help="[deprecated] Alias for --cme-mode both (augment composition with "
                    "k-hop mean gene expression). Prefer --cme-mode.")
+@click.option("--cme-pca-components", default=50, show_default=True, type=click.IntRange(min=2),
+              help="Number of shared PCA components the expression features are "
+                   "reduced to before k-hop aggregation (expression/both modes). "
+                   "Ignored for celltype mode and when --disable-pca is set.")
+@click.option("--disable-pca", is_flag=True, default=False, show_default=True,
+              help="Disable the shared PCA reduction of expression features and feed "
+                   "all genes into the encoder. PCA is on by default because the raw "
+                   "gene panel is high-dimensional and redundant.")
 @click.option("--cme-regions", is_flag=True, default=False, show_default=True,
               help="Also merge per-cell labels into annotation-level regions "
                    "(requires the optional geopandas/shapely extra).")
@@ -103,6 +111,8 @@ def cme(
     cme_mode: str,
     cme_batch_correct: str,
     cme_expression: bool,
+    cme_pca_components: int,
+    disable_pca: bool,
     cme_regions: bool,
     overwrite: bool,
 ) -> None:
@@ -138,6 +148,7 @@ def cme(
         cme_soft_mode=cme_soft,
         cme_mode=cme_mode,
         batch_correct=cme_batch_correct,
+        expression_pca=0 if disable_pca else cme_pca_components,
         overwrite=overwrite,
         slide_mpp_lookup=mpp_lookup,
     )

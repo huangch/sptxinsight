@@ -17,6 +17,9 @@ env/
 .pytest_cache/
 .ruff_cache/
 
+# Sphinx docs build
+docs/_build/
+
 # OS / editor
 .DS_Store
 *.swp
