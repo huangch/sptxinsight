@@ -580,8 +580,8 @@ def hplot_generation(
     hplot_dir.mkdir(parents=True, exist_ok=True)
     hplot_hplots_dir = hplot_dir / "hplots"
     hplot_hplots_dir.mkdir(parents=True, exist_ok=True)
-    hplot_hmetrics_dir = hplot_dir / "hmetrics"
-    hplot_hmetrics_dir.mkdir(parents=True, exist_ok=True)
+    # hplot_hmetrics_dir = hplot_dir / "hmetrics"  # DISABLED: hmetrics
+    # hplot_hmetrics_dir.mkdir(parents=True, exist_ok=True)  # DISABLED: hmetrics
     hplot_cells_dir = hplot_dir / "cells"
     hplot_cells_dir.mkdir(parents=True, exist_ok=True)
 
