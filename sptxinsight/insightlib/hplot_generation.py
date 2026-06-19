@@ -55,6 +55,12 @@ _CME_FAMILY_SUBDIR = {
     "cmehybrid": "cme-hybrid-outputs-csv/cells",
 }
 
+# Cell-cell interaction (CCI) axis. The continuous ``cci_*`` ligand-receptor
+# score columns live in ``cci-outputs-csv/cells/<id>.csv`` (written by
+# `sptxinsight cci`), alongside the ``prob_*`` columns copied through for
+# celltype-based base anchoring.
+_CCI_SUBDIR = "cci-outputs-csv/cells"
+
 
 
 def _worker(
@@ -179,6 +185,22 @@ def _worker(
                 resolved.append(actual)
         return resolved
 
+    # CCI score columns (present only in cci-outputs-csv/cells/<id>.csv). A token
+    # is a cci column name with or without the "cci_" prefix, e.g.
+    # "CCL19_CCR7_in_mean" or "cci_CCL19_CCR7_in_mean".
+    def _resolve_cci(type_list: Sequence[str]) -> list[str]:
+        cols = [c for c in nodes_df.columns.to_list() if c.startswith("cci_")]
+        lower_to_actual = {c.lower(): c for c in cols}
+        resolved = []
+        for t in type_list:
+            key = str(t).strip().lower()
+            if not key.startswith("cci_"):
+                key = f"cci_{key}"
+            actual = lower_to_actual.get(key)
+            if actual is not None and actual not in resolved:
+                resolved.append(actual)
+        return resolved
+
     # ---- base membership: cell type (prob idxmax) OR gene (expr threshold) OR cme ----
     if base_by == "gene":
         base_expr_cols = _resolve_genes(base_type_list)
@@ -203,6 +225,18 @@ def _worker(
             inner.close()
             return slide_id, None, None
         nodes_df["is_base_type"] = nodes_df[base_cme_cols].fillna(0).max(axis=1) > 0
+    elif base_by == "cci":
+        base_cci_cols = _resolve_cci(base_type_list)
+        if not base_cci_cols:
+            _logger.warning(
+                "[%s] None of the base CCI scores %s matched cci_ columns. Skipping slide.",
+                slide_id, sorted(base_type_list),
+            )
+            inner.close()
+            return slide_id, None, None
+        nodes_df["is_base_type"] = (
+            nodes_df[base_cci_cols].mean(axis=1) > base_gene_threshold
+        )
     else:
         base_targets = _resolve_types(base_type_list)
         if not base_targets:
@@ -241,6 +275,19 @@ def _worker(
         # One-hot membership: max over requested cme_ columns is 0/1 per cell, so
         # its per-layer mean is exactly the niche proportion.
         target_value = nodes_df[target_cme_cols].fillna(0).max(axis=1)
+        nodes_df["target_value"] = target_value
+        nodes_df["is_target_type"] = target_value > 0
+    elif target_by == "cci":
+        target_cci_cols = _resolve_cci(target_type_list)
+        if not target_cci_cols:
+            _logger.warning(
+                "[%s] None of the target CCI scores %s matched cci_ columns. Skipping slide.",
+                slide_id, sorted(target_type_list),
+            )
+            inner.close()
+            return slide_id, None, None
+        # Continuous score; its per-layer mean is the layer curve (like genes).
+        target_value = nodes_df[target_cci_cols].mean(axis=1)
         nodes_df["target_value"] = target_value
         nodes_df["is_target_type"] = target_value > 0
     else:

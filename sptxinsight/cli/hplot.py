@@ -43,13 +43,15 @@ def _slide_paths_from_results(results_dir: URIPath) -> tuple[list[URIPath], dict
 @click.option("--target-type", "target_types", callback=csv_to_list, default=None,
               help="Target cell type(s)/gene(s)/CME id(s) whose layer-wise proportion is computed.")
 @click.option("--base-by", default="celltype", show_default=True,
-              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid"]),
-              help="Interpret --base-type as cell types, genes, or a CME niche family "
-                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused).")
+              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci"]),
+              help="Interpret --base-type as cell types, genes, a CME niche family "
+                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), or "
+                   "cci (ligand-receptor score columns from `sptxinsight cci`).")
 @click.option("--target-by", default="celltype", show_default=True,
-              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid"]),
-              help="Interpret --target-type as cell types, genes, or a CME niche family "
-                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused).")
+              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci"]),
+              help="Interpret --target-type as cell types, genes, a CME niche family "
+                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), or "
+                   "cci (ligand-receptor score columns from `sptxinsight cci`).")
 @click.option("--base-gene-threshold", default=0.0, show_default=True, type=float,
               help="Mean expression above which a cell counts as base (only for --base-by gene).")
 @click.option("--hplot-max-neighbor-distance", default=25.0, type=click.FloatRange(min=0),
@@ -94,16 +96,20 @@ def hplot(
     # the matching --cme-mode run (a superset of model-outputs-csv that also
     # carries prob_/expr_ columns). Read from the right family folder whenever an
     # axis is a CME family; both CME axes must use the same family (one file).
-    from ..insightlib.hplot_generation import _CME_FAMILY_SUBDIR
+    from ..insightlib.hplot_generation import _CME_FAMILY_SUBDIR, _CCI_SUBDIR
 
-    cme_axes = [b for b in (base_by, target_by) if b in _CME_FAMILY_SUBDIR]
-    if cme_axes:
-        if len(set(cme_axes)) > 1:
+    # Axes that read from a non-default cells folder (CME families or CCI). All
+    # such axes in one run must agree on a single folder (one file is read).
+    _AXIS_SUBDIR = {**_CME_FAMILY_SUBDIR, "cci": _CCI_SUBDIR}
+    special_axes = [_AXIS_SUBDIR[b] for b in (base_by, target_by) if b in _AXIS_SUBDIR]
+    if special_axes:
+        if len(set(special_axes)) > 1:
             raise click.ClickException(
-                "When both --base-by and --target-by are CME families they must be "
-                f"the same family; got {base_by!r} and {target_by!r}."
+                "--base-by and --target-by select different cells folders "
+                f"({base_by!r} vs {target_by!r}); they must read the same file. "
+                "Combine a cci/cme axis only with celltype, or with the same family."
             )
-        model_output_subdir = _CME_FAMILY_SUBDIR[cme_axes[0]]
+        model_output_subdir = special_axes[0]
     else:
         model_output_subdir = "model-outputs-csv"
     failed = hplot_generation(

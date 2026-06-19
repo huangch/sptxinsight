@@ -99,6 +99,7 @@ BugTracker = "https://github.com/huangch/sptxinsight/issues"
 
 [project.scripts]
 sptxinsight = "sptxinsight.__main__:main"
+sptxinsight-mcp = "sptxinsight.mcp.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["sptxinsight*"]
