@@ -39,9 +39,17 @@ def _slide_paths_from_results(results_dir: URIPath) -> tuple[list[URIPath], dict
     help="Results directory containing model-outputs-csv/ from a prior ingest.",
 )
 @click.option("--base-type", "base_types", callback=csv_to_list, default=None,
-              help="Base cell type(s) forming the cluster(s).")
+              help="Base cell type(s)/gene(s)/CME id(s) forming the cluster(s).")
 @click.option("--target-type", "target_types", callback=csv_to_list, default=None,
-              help="Target cell type(s) whose layer-wise proportion is computed.")
+              help="Target cell type(s)/gene(s)/CME id(s) whose layer-wise proportion is computed.")
+@click.option("--base-by", default="celltype", show_default=True,
+              type=click.Choice(["celltype", "gene", "cme"]),
+              help="Interpret --base-type as cell types, genes, or CME (niche) ids.")
+@click.option("--target-by", default="celltype", show_default=True,
+              type=click.Choice(["celltype", "gene", "cme"]),
+              help="Interpret --target-type as cell types, genes, or CME (niche) ids.")
+@click.option("--base-gene-threshold", default=0.0, show_default=True, type=float,
+              help="Mean expression above which a cell counts as base (only for --base-by gene).")
 @click.option("--hplot-max-neighbor-distance", default=25.0, type=click.FloatRange(min=0),
               help="Maximal distance (um) to a neighboring cell.")
 @click.option("--hplot-k", default=2, type=click.IntRange(min=0),
@@ -65,6 +73,9 @@ def hplot(
     results_dir: URIPath,
     base_types: List[str] | None,
     target_types: List[str] | None,
+    base_by: str,
+    target_by: str,
+    base_gene_threshold: float,
     hplot_max_neighbor_distance: float,
     hplot_k: int,
     hplot_n: int,
@@ -77,12 +88,23 @@ def hplot(
 ) -> None:
     """Compute H-Plot layer curves from already-ingested model-output CSVs."""
     slide_paths, mpp_lookup = _slide_paths_from_results(results_dir)
+    # CME (niche) one-hot columns live in cme-outputs-csv/cells/, a superset of
+    # model-outputs-csv that also carries prob_/expr_ columns. Read from there
+    # whenever either axis is a CME.
+    model_output_subdir = (
+        "cme-outputs-csv/cells"
+        if "cme" in (base_by, target_by)
+        else "model-outputs-csv"
+    )
     failed = hplot_generation(
         wsi_dir=None,
         slide_paths=slide_paths,
         results_dir=results_dir,
         base_type_list=base_types,
         target_type_list=target_types,
+        base_by=base_by,
+        target_by=target_by,
+        base_gene_threshold=base_gene_threshold,
         max_neighbor_distance_um=hplot_max_neighbor_distance,
         hplot_k=hplot_k,
         hplot_N=hplot_n,
@@ -93,6 +115,7 @@ def hplot(
         num_workers=num_workers,
         slide_mpp_lookup=mpp_lookup,
         overwrite=overwrite,
+        model_output_subdir=model_output_subdir,
     )
     ok = len(slide_paths) - len(failed)
     msg = f"H-Plot complete: {ok}/{len(slide_paths)} sample(s)."

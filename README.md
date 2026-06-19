@@ -55,6 +55,8 @@ selects the sample loader and `--log-level` sets logging verbosity.
 | `annotate` | Verify samples are cell-typed and report per-type counts. |
 | `export` | Print the path to the aggregated H-Plot table. |
 | `describe` | Emit a JSON schema of every subcommand (for tooling / MCP). |
+| `cme` | Discover cellular microenvironments (niches) across ingested samples. |
+| `cme-profile` | Summarise each CME's cell composition and marker genes to help name niches. |
 | `hplot`, `hplot-finalize` | Experimental: run/aggregate H-Plot over ingested CSVs. Hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
 
 ### Example
@@ -117,12 +119,69 @@ When a gene mode is active the per-sample contract CSV also carries
 `expr_<gene>` columns. Cell-type mode (the default) is unchanged and produces
 byte-identical results to before.
 
+## Cellular microenvironments (CME / niches)
+
+A **cellular microenvironment** (CME, or *niche*) is a recurring local cell
+mixture — e.g. a tumor core, an immune-infiltrated rim, or a stromal band.
+`sptxinsight cme` discovers them unsupervised: it builds per-sample Delaunay
+cell graphs, gathers k-hop composition features, trains a global DGI encoder,
+clusters the embeddings, and writes a one-hot `cme_<n>` label per cell.
+
+```bash
+# Discover niches across all ingested samples (run after `ingest`/`run`):
+sptxinsight cme -o ./results
+
+# Fix the number of niches, widen the neighborhood, and merge annotation regions:
+sptxinsight cme -o ./results --cme-clusters 8 --cme-k-hops 3 --cme-regions
+
+# Fold k-hop mean gene expression into the features (gene-mode samples only):
+sptxinsight cme -o ./results --cme-expression
+```
+
+Key options: `--cme-clusters` (KMeans k; omit for an automatic Leiden sweep),
+`--cme-k-hops`, `--cme-max-edge-len-um`, `--cme-soft` (probability instead of
+argmax composition), `--cme-expression` (add `expr_` features), and
+`--cme-regions` (merge cells into annotation-level regions).
+
+### Naming niches
+
+`cme-profile` turns the bare `cme_<n>` ids into interpretable profiles — the
+dominant cell types per niche plus, for gene-mode runs, the top enriched marker
+genes:
+
+```bash
+sptxinsight cme-profile -o ./results --top-types 5 --top-genes 10
+```
+
+It writes `cme-profile-composition.csv` (mean cell-type fractions per CME) and,
+when `expr_` columns are present, `cme-profile-markers.csv`.
+
+### Niches as an H-Plot axis
+
+Once niches exist, the experimental `hplot` subcommand can use a CME as the
+**base** region or the **target** quantity via `--base-by cme` / `--target-by
+cme` (alongside the existing `celltype` and `gene` modes). The y-value is then
+the per-layer **fraction of cells belonging to that niche**:
+
+```bash
+SPTXINSIGHT_EXPERIMENTAL=1 sptxinsight hplot -o ./results \
+  --base-type tumor --base-by celltype \
+  --target-type 7 --target-by cme        # fraction of cells in cme_7 per layer
+```
+
+`--base-by`/`--target-by` accept `celltype` (default), `gene`, or `cme`;
+`--base-gene-threshold` applies only to `--base-by gene`. CME ids may be given
+as `7` or `cme_7`.
+
 ## Outputs
 
 ```
 results/
   model-outputs-csv/<id>.csv     # center_x, center_y, prob_<type>, expr_<gene> ...
   graphs/<id>.h5                 # cached Delaunay graph
+  cme-outputs-csv/cells/<id>.csv # per-cell cme_<n> one-hot labels (after `cme`)
+  cme-profile-composition.csv    # per-niche cell-type fractions (after `cme-profile`)
+  cme-profile-markers.csv        # per-niche marker genes (gene-mode only)
   hplot-outputs-csv/hplots/...   # per-sample layer curves
   hplot-outputs.csv              # aggregated, gap-filled layer table
 ```

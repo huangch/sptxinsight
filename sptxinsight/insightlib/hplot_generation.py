@@ -152,7 +152,23 @@ def _worker(
                 resolved.append(actual)
         return resolved
 
-    # ---- base membership: cell type (prob idxmax) OR gene (expr threshold) ----
+    # CME one-hot columns (present only in cme-outputs-csv/cells/<id>.csv).
+    cme_columns = [c for c in nodes_df.columns.to_list() if c.startswith("cme_")]
+    _cme_lower_to_actual = {c.lower(): c for c in cme_columns}
+
+    def _resolve_cmes(type_list: Sequence[str]) -> list[str]:
+        """Map CME ids ("2" or "cme_2") to actual cme_ columns, case-insensitively."""
+        resolved = []
+        for t in type_list:
+            key = str(t).strip().lower()
+            if not key.startswith("cme_"):
+                key = f"cme_{key}"
+            actual = _cme_lower_to_actual.get(key)
+            if actual is not None and actual not in resolved:
+                resolved.append(actual)
+        return resolved
+
+    # ---- base membership: cell type (prob idxmax) OR gene (expr threshold) OR cme ----
     if base_by == "gene":
         base_expr_cols = _resolve_genes(base_type_list)
         if not base_expr_cols:
@@ -165,6 +181,16 @@ def _worker(
         nodes_df["is_base_type"] = (
             nodes_df[base_expr_cols].mean(axis=1) > base_gene_threshold
         )
+    elif base_by == "cme":
+        base_cme_cols = _resolve_cmes(base_type_list)
+        if not base_cme_cols:
+            _logger.warning(
+                "[%s] None of the base CMEs %s matched cme_ columns %s. Skipping slide.",
+                slide_id, sorted(base_type_list), sorted(cme_columns),
+            )
+            inner.close()
+            return slide_id, None, None
+        nodes_df["is_base_type"] = nodes_df[base_cme_cols].fillna(0).max(axis=1) > 0
     else:
         base_targets = _resolve_types(base_type_list)
         if not base_targets:
@@ -176,7 +202,7 @@ def _worker(
             return slide_id, None, None
         nodes_df["is_base_type"] = predicted_labels.isin(base_targets)
 
-    # ---- target value: cell-type proportion OR mean gene expression ----
+    # ---- target value: cell-type proportion OR mean gene expression OR cme proportion ----
     if target_by == "gene":
         target_expr_cols = _resolve_genes(target_type_list)
         if not target_expr_cols:
@@ -189,6 +215,20 @@ def _worker(
         target_value = nodes_df[target_expr_cols].mean(axis=1)
         nodes_df["target_value"] = target_value
         # Count of expressing cells (expr > 0) gives the per-layer "target_count".
+        nodes_df["is_target_type"] = target_value > 0
+    elif target_by == "cme":
+        target_cme_cols = _resolve_cmes(target_type_list)
+        if not target_cme_cols:
+            _logger.warning(
+                "[%s] None of the target CMEs %s matched cme_ columns %s. Skipping slide.",
+                slide_id, sorted(target_type_list), sorted(cme_columns),
+            )
+            inner.close()
+            return slide_id, None, None
+        # One-hot membership: max over requested cme_ columns is 0/1 per cell, so
+        # its per-layer mean is exactly the niche proportion.
+        target_value = nodes_df[target_cme_cols].fillna(0).max(axis=1)
+        nodes_df["target_value"] = target_value
         nodes_df["is_target_type"] = target_value > 0
     else:
         target_targets = _resolve_types(target_type_list)
@@ -465,6 +505,7 @@ def hplot_generation(
     num_workers: int = 8,
     slide_mpp_lookup: Mapping[str, float] | None = None,
     overwrite: bool = False,
+    model_output_subdir: str = "model-outputs-csv",
 ) -> list[str]:
     """Compute H-Plot layers/metrics for WSInsight outputs and persist aggregated CSVs."""
 
@@ -513,7 +554,7 @@ def hplot_generation(
 
     slide_paths = normalized_slide_paths
 
-    model_output_dir = results_dir / "model-outputs-csv"
+    model_output_dir = results_dir / model_output_subdir
     model_output_dir.mkdir(parents=True, exist_ok=True)
 
     model_output_paths = [model_output_dir / p.with_suffix(".csv").name for p in slide_paths]

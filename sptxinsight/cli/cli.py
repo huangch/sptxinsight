@@ -16,6 +16,7 @@ from .ingest import ingest
 from .annotate import annotate
 from .export import export
 from .hplot import hplot, hplot_finalize_cmd
+from .cme import cme, cme_profile_cmd
 
 _logging_levels = ["debug", "info", "warning", "error", "critical"]
 
@@ -71,6 +72,8 @@ cli.add_command(annotate)
 cli.add_command(export)
 cli.add_command(hplot)
 cli.add_command(hplot_finalize_cmd)
+cli.add_command(cme)
+cli.add_command(cme_profile_cmd)
 
 # Hide experimental commands from --help unless SPTXINSIGHT_EXPERIMENTAL is set.
 # They remain registered so `describe` can emit the full schema; invocation is

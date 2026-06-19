@@ -27,8 +27,10 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-# Deliberately lightweight: the vendored H-Plot engine needs only the numeric /
-# graph stack, NOT torch / tensorflow / openslide. Keep it that way.
+# The vendored H-Plot engine needs only the numeric / graph stack. CME / niche
+# discovery additionally needs torch + torch_geometric and the geopandas /
+# shapely GIS stack (all accepted as core deps); these are already present in
+# the shared `wsinsight` env.
 #
 # Version bounds are chosen so sptxinsight is CO-INSTALLABLE in the shared
 # `wsinsight` conda env, whose locked set (constraints.txt) pins numpy<2,
@@ -44,6 +46,18 @@ dependencies = [
   "scipy>=1.10",
   "h5py",
   "tqdm",
+
+  # Cellular microenvironment (CME) / niche discovery. Co-installable with the
+  # shared wsinsight env (both pin torch + torch_geometric already). geopandas /
+  # shapely back the annotation-level region merge (sptxinsight cme --cme-regions).
+  "torch",
+  "torch_geometric",
+  "scikit-learn",
+  "python-igraph",
+  "leidenalg",
+  "joblib",
+  "geopandas",
+  "shapely",
 
   # Storage / cloud I/O (URIPath). Capped to the wsinsight 2025.9 generation;
   # the 2026.x line pulls zarr>=3 and breaks wsinsight's zarr<3 readers.
