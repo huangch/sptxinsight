@@ -466,6 +466,7 @@ def prepare_slide_graph(
     slide_id: Optional[str] = None,
     mode: str = "hard",
     use_expression: bool = False,
+    feature_source: str = "celltype",
 ) -> Dict[str, np.ndarray]:
     """Build one sample graph.
 
@@ -473,11 +474,23 @@ def prepare_slide_graph(
     - Delaunay + distance cap (shared helper); for sptxinsight ``mpp_um_per_px``
       is ``1.0`` and coordinates are already in microns.
     - drop isolated cells
-    - features = k-hop cell-type composition, optionally concatenated with
-      k-hop mean gene expression (``use_expression``).
+    - features selected by ``feature_source``:
+        * ``"celltype"``   -> k-hop cell-type composition (default; unchanged).
+        * ``"expression"`` -> k-hop mean gene expression only (needs ``expr_``).
+        * ``"both"``       -> composition concatenated with mean expression.
+      The legacy ``use_expression`` flag is treated as ``feature_source="both"``.
 
-    Returns: {'X','edge_index','kept_idx','classes','genes','edges_df'}.
+    Returns: {'X','edge_index','kept_idx','classes','genes','feature_source','edges_df'}.
     """
+    if use_expression and feature_source == "celltype":
+        feature_source = "both"
+    if feature_source not in ("celltype", "expression", "both"):
+        raise ValueError(
+            f"feature_source must be celltype/expression/both, got {feature_source!r}"
+        )
+    want_celltype = feature_source in ("celltype", "both")
+    want_expression = feature_source in ("expression", "both")
+
     df = compute_cell_center_points(cme_detection_df.copy())
     centers_px = df[["center_x", "center_y"]].to_numpy(dtype=np.float32)
     N = len(df)
@@ -498,21 +511,36 @@ def prepare_slide_graph(
         raise ValueError("All nodes are isolated after distance cap; nothing to train.")
     N_kept = len(kept_idx)
 
-    P_all, classes = probs_from_df(df, class_order=class_order)  # [N,C]
-    P = P_all[kept_idx]  # [N_kept,C]
-
-    X_khop = khop_features(P=P, edge_index=edge_index, N=N_kept, k=k_hops, alpha=alpha, mode=mode)
-    blocks = [X_khop.astype(np.float32)]
-
+    blocks: List[np.ndarray] = []
+    classes: List[str] = []
     genes: List[str] = []
-    if use_expression:
+
+    if want_celltype:
+        P_all, classes = probs_from_df(df, class_order=class_order)  # [N,C]
+        P = P_all[kept_idx]  # [N_kept,C]
+        X_khop = khop_features(P=P, edge_index=edge_index, N=N_kept,
+                               k=k_hops, alpha=alpha, mode=mode)
+        blocks.append(X_khop.astype(np.float32))
+
+    if want_expression:
         expr_cols = [c for c in df.columns if c.startswith("expr_")]
-        if expr_cols:
+        if not expr_cols:
+            if feature_source == "expression":
+                raise errors.WsinferException(
+                    f"--cme-mode expression needs expr_ columns, but sample "
+                    f"{slide_id!r} has none. Re-ingest with transcript data, or "
+                    f"use --cme-mode celltype."
+                )
+            # 'both' on a sample without expression: fall back to composition.
+        else:
             genes = [c[len("expr_"):] for c in expr_cols]
             V = df[expr_cols].to_numpy(dtype=np.float32)
             V = np.nan_to_num(V)[kept_idx]
             X_expr = khop_mean_features(V, edge_index=edge_index, N=N_kept, k=k_hops)
             blocks.append(X_expr.astype(np.float32))
+
+    if not blocks:
+        raise ValueError(f"No features built for sample {slide_id!r} (mode={feature_source}).")
 
     X = np.hstack(blocks).astype(np.float32)
 
@@ -522,6 +550,7 @@ def prepare_slide_graph(
         "kept_idx": kept_idx.astype(np.int64),
         "classes": classes,
         "genes": genes,
+        "feature_source": feature_source,
         "edges_df": edges_df,
     }
 
@@ -711,6 +740,72 @@ def _mpp_for(wsi_path, slide_mpp_lookup: Mapping[str, float] | None) -> float:
 
 
 # =============================================================================
+# CME mode namespacing + cross-sample batch correction
+# =============================================================================
+
+# Each mode writes to its own output dir / one-hot column prefix / checkpoint
+# suffix so cell-type, gene-expression, and hybrid niches can coexist on the
+# same cells without clobbering each other. ``celltype`` keeps the original
+# (unsuffixed) paths and ``cme_`` prefix for backward compatibility.
+_CME_MODE_SPEC: Dict[str, Dict[str, str]] = {
+    "celltype":   {"subdir": "cme-outputs-csv",        "prefix": "cme",    "ckpt": ""},
+    "expression": {"subdir": "cme-gex-outputs-csv",    "prefix": "gexcme", "ckpt": "-gex"},
+    "both":       {"subdir": "cme-hybrid-outputs-csv", "prefix": "hcme",   "ckpt": "-hybrid"},
+}
+
+
+def center_per_sample(Z_list: List[np.ndarray]) -> List[np.ndarray]:
+    """Per-sample mean-centering of DGI embeddings (native batch correction).
+
+    Subtracts each sample's mean embedding and adds back the cohort grand mean,
+    so per-sample location shifts (a common technical batch effect) are removed
+    while the shared embedding geometry is preserved. Zero dependencies.
+    """
+    if not Z_list:
+        return Z_list
+    grand = np.vstack(Z_list).mean(axis=0)
+    return [(Z - Z.mean(axis=0) + grand).astype(np.float32) for Z in Z_list]
+
+
+def _harmony_correct(Z_list: List[np.ndarray],
+                     sample_ids: Sequence[str]) -> List[np.ndarray]:
+    """Harmony batch correction over the pooled DGI embeddings (optional dep)."""
+    try:
+        from harmonypy import run_harmony
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError(
+            "Harmony batch correction needs the optional 'harmonypy' package. "
+            "Install it with: pip install harmonypy  "
+            "(or pip install 'sptxinsight[harmony]')."
+        ) from exc
+    lengths = [len(Z) for Z in Z_list]
+    Z_all = np.vstack(Z_list).astype(np.float64)
+    batch = np.repeat([str(s) for s in sample_ids], lengths)
+    meta = pd.DataFrame({"sample": batch})
+    ho = run_harmony(Z_all, meta, ["sample"])
+    Z_corr = np.asarray(ho.Z_corr).T.astype(np.float32)  # [N, d]
+    out: List[np.ndarray] = []
+    off = 0
+    for n in lengths:
+        out.append(Z_corr[off:off + n])
+        off += n
+    return out
+
+
+def _apply_batch_correction(Z_list: List[np.ndarray],
+                            batch_correct: str,
+                            sample_ids: Sequence[str]) -> List[np.ndarray]:
+    """Dispatch ``none`` / ``center`` / ``harmony`` correction on ``Z_list``."""
+    if batch_correct in (None, "none"):
+        return Z_list
+    if batch_correct == "center":
+        return center_per_sample(Z_list)
+    if batch_correct == "harmony":
+        return _harmony_correct(Z_list, sample_ids)
+    raise ValueError(f"batch_correct must be none/center/harmony, got {batch_correct!r}")
+
+
+# =============================================================================
 # End-to-end multi-sample training + clustering
 # =============================================================================
 
@@ -734,6 +829,8 @@ def cme_generation(
     cme_clustering_resolutions: List[float] = [0.5, 1.0, 2.0],
     cme_soft_mode: bool = False,
     use_expression: bool = False,
+    cme_mode: str = "celltype",
+    batch_correct: str = "none",
     overwrite: bool = False,
     slide_mpp_lookup: Mapping[str, float] | None = None,
 ) -> None:
@@ -741,7 +838,20 @@ def cme_generation(
 
     Builds per-sample Delaunay cell graphs, trains one shared DGI encoder, clusters
     the embeddings, and writes per-cell CME labels (and optional region merges).
+
+    ``cme_mode`` selects which features drive the niches and namespaces all
+    outputs/checkpoints (see :data:`_CME_MODE_SPEC`): ``celltype`` (default,
+    byte-identical to the original behaviour), ``expression`` (gene niches), or
+    ``both`` (fused). The legacy ``use_expression`` flag maps to ``both``.
+    ``batch_correct`` (``none``/``center``/``harmony``) is applied to the DGI
+    embeddings before clustering to remove cross-sample technical shifts.
     """
+    if use_expression and cme_mode == "celltype":
+        cme_mode = "both"
+    if cme_mode not in _CME_MODE_SPEC:
+        raise ValueError(f"cme_mode must be one of {sorted(_CME_MODE_SPEC)}, got {cme_mode!r}")
+    mode_spec = _CME_MODE_SPEC[cme_mode]
+
     if os.getenv("SPTXINSIGHT_FORCE_CPU", "0").lower() not in {"0", "f", "false"}:
         device = torch.device("cpu")
     elif torch.cuda.is_available():
@@ -792,14 +902,14 @@ def cme_generation(
             "The 'model-outputs-csv' and sample directory were mismatched."
         )
 
-    cme_output_dir = results_dir / "cme-outputs-csv"
+    cme_output_dir = results_dir / mode_spec["subdir"]
     cme_output_dir.mkdir(exist_ok=True)
-    cme_cells_output_dir = results_dir / "cme-outputs-csv" / "cells"
+    cme_cells_output_dir = cme_output_dir / "cells"
     cme_cells_output_dir.mkdir(exist_ok=True)
-    cme_cmes_output_dir = results_dir / "cme-outputs-csv" / "cmes"
+    cme_cmes_output_dir = cme_output_dir / "cmes"
     cme_cmes_output_dir.mkdir(exist_ok=True)
-    cme_slide_graph_file = results_dir / "slide-graphs.joblib"
-    cme_dgi_embeddings_file = results_dir / "dgi-embeddings.joblib"
+    cme_slide_graph_file = results_dir / f"slide-graphs{mode_spec['ckpt']}.joblib"
+    cme_dgi_embeddings_file = results_dir / f"dgi-embeddings{mode_spec['ckpt']}.joblib"
 
     if overwrite:
         for _ckpt in (cme_slide_graph_file, cme_dgi_embeddings_file):
@@ -838,7 +948,7 @@ def cme_generation(
                 graph_cache_dir=graph_cache_dir,
                 slide_id=slide_id,
                 mode="soft" if cme_soft_mode else "hard",
-                use_expression=use_expression,
+                feature_source=cme_mode,
             )
             slides.append(s)
             if classes is None:
@@ -861,6 +971,15 @@ def cme_generation(
         click.secho("\nPhase 2/5: Train shared DGI encoder and get embeddings per sample.\n", fg="green")
         _, Z_list = train_dgi_multi(slides, hidden=hidden, out_dim=out_dim, epochs=epochs)
         joblib.dump(Z_list, cme_dgi_embeddings_file, compress=3)
+
+    # ---- Phase 2b/5: cross-sample batch correction on embeddings -----------
+    # Applied AFTER (re)loading the raw embeddings so the checkpoint stays
+    # correction-agnostic and the method can be changed between runs.
+    if batch_correct not in (None, "none"):
+        click.secho(f"\nPhase 2b/5: Apply '{batch_correct}' cross-sample batch correction.\n",
+                    fg="green")
+        sample_ids = [Path(str(p)).stem for p in slide_paths]
+        Z_list = _apply_batch_correction(Z_list, batch_correct, sample_ids)
 
     # ---- Phase 3/5: choose cluster count -----------------------------------
     if not cme_clustering_k:
@@ -906,7 +1025,7 @@ def cme_generation(
             )
             cme_detection_df.loc[slides[i]["kept_idx"], feature_normalized_cols] = slides[i]["X_normalized"]
             cme_detection_df.loc[slides[i]["kept_idx"], feature_cols] = slides[i]["X"]
-            cme_cols = [f"cme_{l}" for l in range(cme_clustering_k)]
+            cme_cols = [f"{mode_spec['prefix']}_{l}" for l in range(cme_clustering_k)]
             label_one_hot = np.eye(cme_clustering_k, dtype=np.float32)[labels_list[i]]
             cme_detection_df.loc[slides[i]["kept_idx"], cme_cols] = label_one_hot
 
@@ -949,6 +1068,7 @@ def cme_generation(
                 cme_clustering_k=cme_clustering_k,
                 mpp=mpp,
                 max_radius_um=max_cell_radius_um,
+                cme_prefix=f"{mode_spec['prefix']}_",
             )
 
             with critical_section(f"saving CME annotation output for {Path(str(wsi_path)).stem}"):

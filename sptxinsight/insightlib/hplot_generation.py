@@ -45,6 +45,17 @@ _WORKER_STEPS = [
 ]
 _STEP_LABEL_W = 12  # pad postfix so tqdm bar geometry stays stable across steps
 
+# CME niche families selectable via --base-by/--target-by. Each maps a token to
+# the one-hot column prefix (and, in the CLI, the cells subdir) produced by the
+# matching `sptxinsight cme --cme-mode` run.
+_CME_FAMILY_PREFIX = {"cme": "cme_", "cmegex": "gexcme_", "cmehybrid": "hcme_"}
+_CME_FAMILY_SUBDIR = {
+    "cme": "cme-outputs-csv/cells",
+    "cmegex": "cme-gex-outputs-csv/cells",
+    "cmehybrid": "cme-hybrid-outputs-csv/cells",
+}
+
+
 
 def _worker(
     wsi_path: URIPath,
@@ -152,18 +163,18 @@ def _worker(
                 resolved.append(actual)
         return resolved
 
-    # CME one-hot columns (present only in cme-outputs-csv/cells/<id>.csv).
-    cme_columns = [c for c in nodes_df.columns.to_list() if c.startswith("cme_")]
-    _cme_lower_to_actual = {c.lower(): c for c in cme_columns}
-
-    def _resolve_cmes(type_list: Sequence[str]) -> list[str]:
-        """Map CME ids ("2" or "cme_2") to actual cme_ columns, case-insensitively."""
+    # CME one-hot columns (present only in cme*-outputs-csv/cells/<id>.csv). The
+    # active family is chosen by base_by/target_by (cme | cmegex | cmehybrid).
+    def _resolve_cmes(type_list: Sequence[str], prefix: str) -> list[str]:
+        """Map niche ids ("2" or "<prefix>2") to actual columns, case-insensitively."""
+        cols = [c for c in nodes_df.columns.to_list() if c.startswith(prefix)]
+        lower_to_actual = {c.lower(): c for c in cols}
         resolved = []
         for t in type_list:
             key = str(t).strip().lower()
-            if not key.startswith("cme_"):
-                key = f"cme_{key}"
-            actual = _cme_lower_to_actual.get(key)
+            if not key.startswith(prefix):
+                key = f"{prefix}{key}"
+            actual = lower_to_actual.get(key)
             if actual is not None and actual not in resolved:
                 resolved.append(actual)
         return resolved
@@ -181,12 +192,13 @@ def _worker(
         nodes_df["is_base_type"] = (
             nodes_df[base_expr_cols].mean(axis=1) > base_gene_threshold
         )
-    elif base_by == "cme":
-        base_cme_cols = _resolve_cmes(base_type_list)
+    elif base_by in _CME_FAMILY_PREFIX:
+        base_prefix = _CME_FAMILY_PREFIX[base_by]
+        base_cme_cols = _resolve_cmes(base_type_list, base_prefix)
         if not base_cme_cols:
             _logger.warning(
-                "[%s] None of the base CMEs %s matched cme_ columns %s. Skipping slide.",
-                slide_id, sorted(base_type_list), sorted(cme_columns),
+                "[%s] None of the base CMEs %s matched %s columns. Skipping slide.",
+                slide_id, sorted(base_type_list), base_prefix,
             )
             inner.close()
             return slide_id, None, None
@@ -216,12 +228,13 @@ def _worker(
         nodes_df["target_value"] = target_value
         # Count of expressing cells (expr > 0) gives the per-layer "target_count".
         nodes_df["is_target_type"] = target_value > 0
-    elif target_by == "cme":
-        target_cme_cols = _resolve_cmes(target_type_list)
+    elif target_by in _CME_FAMILY_PREFIX:
+        target_prefix = _CME_FAMILY_PREFIX[target_by]
+        target_cme_cols = _resolve_cmes(target_type_list, target_prefix)
         if not target_cme_cols:
             _logger.warning(
-                "[%s] None of the target CMEs %s matched cme_ columns %s. Skipping slide.",
-                slide_id, sorted(target_type_list), sorted(cme_columns),
+                "[%s] None of the target CMEs %s matched %s columns. Skipping slide.",
+                slide_id, sorted(target_type_list), target_prefix,
             )
             inner.close()
             return slide_id, None, None

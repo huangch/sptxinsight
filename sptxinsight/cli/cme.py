@@ -6,14 +6,18 @@ graph, computes k-hop cell-type composition features, trains one shared DGI
 encoder across the cohort, clusters the embeddings into recurring
 microenvironments, and writes per-cell CME labels.
 
-Outputs written to ``<results-dir>/``::
+Outputs written to ``<results-dir>/`` (namespaced by ``--cme-mode``)::
 
-    cme-outputs-csv/cells/<id>.csv   per-cell CME labels + k-hop features
-    cme-outputs-csv/cmes/<id>.csv    annotation-level merged regions (with --cme-regions)
+    cme-outputs-csv/cells/<id>.csv       celltype niches (cme_*; default)
+    cme-gex-outputs-csv/cells/<id>.csv   gene-expression niches (gexcme_*)
+    cme-hybrid-outputs-csv/cells/<id>.csv fused niches (hcme_*)
+    <subdir>/cmes/<id>.csv               annotation-level merged regions (--cme-regions)
 
 The ``cme_0 .. cme_{K-1}`` one-hot columns in the cells CSV can be fed straight
 into ``sptxinsight hplot`` as ``prob_`` columns to plot niche proportion over
-distance.
+distance. Because each mode writes to its own folder/column prefix, cell-type and
+gene-expression niches coexist on the same cells and can be compared with
+``cme-profile``'s agreement report.
 """
 
 from __future__ import annotations
@@ -66,9 +70,22 @@ def _slide_paths_from_results(results_dir: URIPath):
               help="DGI encoder training epochs.")
 @click.option("--cme-soft", is_flag=True, default=False, show_default=True,
               help="Use soft (probability) composition features instead of hard argmax labels.")
+@click.option("--cme-mode", default="celltype", show_default=True,
+              type=click.Choice(["celltype", "expression", "both"]),
+              help="Feature source for the niches and output namespace: 'celltype' "
+                   "(k-hop cell-type composition -> cme-outputs-csv/, cme_ columns), "
+                   "'expression' (k-hop mean gene expression -> cme-gex-outputs-csv/, "
+                   "gexcme_ columns), or 'both' (fused -> cme-hybrid-outputs-csv/, "
+                   "hcme_ columns). Modes write to separate folders so they coexist.")
+@click.option("--cme-batch-correct", default="none", show_default=True,
+              type=click.Choice(["none", "center", "harmony"]),
+              help="Cross-sample correction of the DGI embeddings before clustering: "
+                   "'center' (per-sample mean-centering, no extra deps) or 'harmony' "
+                   "(needs the optional harmonypy package). Use the technical unit "
+                   "(sample/run), never a biological condition, as the batch.")
 @click.option("--cme-expression", is_flag=True, default=False, show_default=True,
-              help="Augment composition features with k-hop mean gene expression "
-                   "(uses the expr_ columns; only meaningful for gene-mode samples).")
+              help="[deprecated] Alias for --cme-mode both (augment composition with "
+                   "k-hop mean gene expression). Prefer --cme-mode.")
 @click.option("--cme-regions", is_flag=True, default=False, show_default=True,
               help="Also merge per-cell labels into annotation-level regions "
                    "(requires the optional geopandas/shapely extra).")
@@ -83,6 +100,8 @@ def cme(
     cme_max_cell_radius_um: float,
     cme_epochs: int,
     cme_soft: bool,
+    cme_mode: str,
+    cme_batch_correct: str,
     cme_expression: bool,
     cme_regions: bool,
     overwrite: bool,
@@ -91,7 +110,11 @@ def cme(
     # Imported inside the callback (not at module import) so the heavy torch /
     # torch_geometric stack is only loaded when CME analysis is actually run,
     # keeping `sptxinsight --help` and other subcommands fast.
-    from ..insightlib.cme_generation import cme_generation
+    from ..insightlib.cme_generation import _CME_MODE_SPEC, cme_generation
+
+    # Backward-compat: --cme-expression is an alias for --cme-mode both.
+    if cme_expression and cme_mode == "celltype":
+        cme_mode = "both"
 
     slide_paths, mpp_lookup = _slide_paths_from_results(results_dir)
 
@@ -113,12 +136,13 @@ def cme(
         cme_clustering_k=cme_clusters,
         cme_clustering_resolutions=[0.5, 1.0, 2.0],
         cme_soft_mode=cme_soft,
-        use_expression=cme_expression,
+        cme_mode=cme_mode,
+        batch_correct=cme_batch_correct,
         overwrite=overwrite,
         slide_mpp_lookup=mpp_lookup,
     )
 
-    ncells = results_dir / "cme-outputs-csv" / "cells"
+    ncells = results_dir / _CME_MODE_SPEC[cme_mode]["subdir"] / "cells"
     click.secho(f"\nCME analysis completed. Per-cell labels in {ncells}\n", fg="green")
 
 
@@ -130,16 +154,24 @@ def cme(
     required=True,
     help="Results directory containing cme-outputs-csv/cells/ from `sptxinsight cme`.",
 )
+@click.option("--cme-mode", default="celltype", show_default=True,
+              type=click.Choice(["celltype", "expression", "both"]),
+              help="Which niche family to profile (matches the `cme --cme-mode` run).")
 @click.option("--top-genes", default=10, show_default=True, type=click.IntRange(min=1),
               help="Number of top enriched marker genes to report per CME.")
 @click.option("--top-types", default=5, show_default=True, type=click.IntRange(min=1),
               help="Number of top cell types to summarise per CME.")
-def cme_profile_cmd(*, results_dir: URIPath, top_genes: int, top_types: int) -> None:
+@click.option("--agreement/--no-agreement", "agreement", default=None,
+              help="Also report celltype-vs-gene niche agreement (NMI + cross-tab). "
+                   "Default: auto when both cme-outputs-csv and cme-gex-outputs-csv exist.")
+def cme_profile_cmd(*, results_dir: URIPath, cme_mode: str, top_genes: int,
+                    top_types: int, agreement: bool | None) -> None:
     """Summarise each CME's cell composition and marker genes to help name niches."""
-    from ..insightlib.cme_profile import cme_profile
+    from ..insightlib.cme_profile import cme_agreement, cme_profile
 
     comp, markers = cme_profile(
         str(results_dir), top_genes=top_genes, top_types=top_types, write=True,
+        mode=cme_mode,
     )
 
     click.secho("\nCME composition (mean cell-type fractions):\n", fg="green")
@@ -157,5 +189,24 @@ def cme_profile_cmd(*, results_dir: URIPath, top_genes: int, top_types: int) -> 
             "\n(No expr_ columns found; run `sptxinsight cme` on gene-mode samples "
             "for marker-gene fingerprints.)\n", fg="yellow")
 
-    click.secho(f"\nWrote cme-profile-composition.csv (and markers, if any) to {results_dir}\n",
+    click.secho(f"\nWrote cme-profile-composition*.csv (and markers, if any) to {results_dir}\n",
                 fg="green")
+
+    # ---- celltype-vs-gene niche agreement (auto when both families exist) ----
+    if agreement is not False:
+        result = cme_agreement(str(results_dir), write=True)
+        if result is None:
+            if agreement is True:
+                click.secho(
+                    "\n(Agreement needs both cme-outputs-csv/ and cme-gex-outputs-csv/; "
+                    "run `cme --cme-mode celltype` and `cme --cme-mode expression` first.)\n",
+                    fg="yellow")
+        else:
+            nmi, crosstab = result
+            click.secho(
+                f"\nCelltype-vs-gene niche agreement: NMI = {nmi:.3f}\n"
+                f"(0 = independent labelings, 1 = identical). Cross-tab "
+                f"(rows=celltype niche, cols=gene niche):\n", fg="green")
+            with pd.option_context("display.width", 200):
+                click.echo(crosstab.to_string())
+            click.secho(f"\nWrote cme-agreement.csv to {results_dir}\n", fg="green")

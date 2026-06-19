@@ -43,11 +43,13 @@ def _slide_paths_from_results(results_dir: URIPath) -> tuple[list[URIPath], dict
 @click.option("--target-type", "target_types", callback=csv_to_list, default=None,
               help="Target cell type(s)/gene(s)/CME id(s) whose layer-wise proportion is computed.")
 @click.option("--base-by", default="celltype", show_default=True,
-              type=click.Choice(["celltype", "gene", "cme"]),
-              help="Interpret --base-type as cell types, genes, or CME (niche) ids.")
+              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid"]),
+              help="Interpret --base-type as cell types, genes, or a CME niche family "
+                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused).")
 @click.option("--target-by", default="celltype", show_default=True,
-              type=click.Choice(["celltype", "gene", "cme"]),
-              help="Interpret --target-type as cell types, genes, or CME (niche) ids.")
+              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid"]),
+              help="Interpret --target-type as cell types, genes, or a CME niche family "
+                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused).")
 @click.option("--base-gene-threshold", default=0.0, show_default=True, type=float,
               help="Mean expression above which a cell counts as base (only for --base-by gene).")
 @click.option("--hplot-max-neighbor-distance", default=25.0, type=click.FloatRange(min=0),
@@ -88,14 +90,22 @@ def hplot(
 ) -> None:
     """Compute H-Plot layer curves from already-ingested model-output CSVs."""
     slide_paths, mpp_lookup = _slide_paths_from_results(results_dir)
-    # CME (niche) one-hot columns live in cme-outputs-csv/cells/, a superset of
-    # model-outputs-csv that also carries prob_/expr_ columns. Read from there
-    # whenever either axis is a CME.
-    model_output_subdir = (
-        "cme-outputs-csv/cells"
-        if "cme" in (base_by, target_by)
-        else "model-outputs-csv"
-    )
+    # CME (niche) one-hot columns live in the cme*-outputs-csv/cells/ folder of
+    # the matching --cme-mode run (a superset of model-outputs-csv that also
+    # carries prob_/expr_ columns). Read from the right family folder whenever an
+    # axis is a CME family; both CME axes must use the same family (one file).
+    from ..insightlib.hplot_generation import _CME_FAMILY_SUBDIR
+
+    cme_axes = [b for b in (base_by, target_by) if b in _CME_FAMILY_SUBDIR]
+    if cme_axes:
+        if len(set(cme_axes)) > 1:
+            raise click.ClickException(
+                "When both --base-by and --target-by are CME families they must be "
+                f"the same family; got {base_by!r} and {target_by!r}."
+            )
+        model_output_subdir = _CME_FAMILY_SUBDIR[cme_axes[0]]
+    else:
+        model_output_subdir = "model-outputs-csv"
     failed = hplot_generation(
         wsi_dir=None,
         slide_paths=slide_paths,

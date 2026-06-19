@@ -87,6 +87,11 @@ scanpy = [
 mcp = [
   "fastmcp>=2.0",
 ]
+# Cross-sample batch correction of CME embeddings (sptxinsight cme
+# --cme-batch-correct harmony). Pure-Python; the 'center' method needs no extra.
+harmony = [
+  "harmonypy>=0.0.9",
+]
 
 [project.urls]
 Repository = "https://github.com/huangch/sptxinsight"

@@ -134,54 +134,86 @@ sptxinsight cme -o ./results
 # Fix the number of niches, widen the neighborhood, and merge annotation regions:
 sptxinsight cme -o ./results --cme-clusters 8 --cme-k-hops 3 --cme-regions
 
-# Fold k-hop mean gene expression into the features (gene-mode samples only):
-sptxinsight cme -o ./results --cme-expression
+# Gene-expression niches (k-hop mean expression) instead of cell-type niches:
+sptxinsight cme -o ./results --cme-mode expression --cme-batch-correct center
 ```
+
+`--cme-mode` selects what drives the niches and namespaces the outputs so the
+families coexist on the same cells:
+
+| `--cme-mode` | features | output folder | one-hot columns |
+| --- | --- | --- | --- |
+| `celltype` (default) | k-hop cell-type composition | `cme-outputs-csv/` | `cme_<n>` |
+| `expression` | k-hop mean gene expression (`expr_`) | `cme-gex-outputs-csv/` | `gexcme_<n>` |
+| `both` | composition + expression (fused) | `cme-hybrid-outputs-csv/` | `hcme_<n>` |
+
+Run the command twice (once per mode) to get **parallel** cell-type and gene
+niches on the same cells; `celltype` stays byte-identical to earlier releases.
 
 Key options: `--cme-clusters` (KMeans k; omit for an automatic Leiden sweep),
 `--cme-k-hops`, `--cme-max-edge-len-um`, `--cme-soft` (probability instead of
-argmax composition), `--cme-expression` (add `expr_` features), and
-`--cme-regions` (merge cells into annotation-level regions).
+argmax composition), `--cme-mode` (`celltype`/`expression`/`both`),
+`--cme-batch-correct` (`none`/`center`/`harmony` cross-sample correction of the
+embeddings — use a technical unit such as sample/run as the batch, never a
+biological condition), and `--cme-regions` (merge cells into annotation-level
+regions). `--cme-expression` is a deprecated alias for `--cme-mode both`.
+The `harmony` method needs the optional `harmonypy` extra
+(`pip install 'sptxinsight[harmony]'`); `center` needs no extra dependency.
 
 ### Naming niches
 
-`cme-profile` turns the bare `cme_<n>` ids into interpretable profiles — the
+`cme-profile` turns the bare niche ids into interpretable profiles — the
 dominant cell types per niche plus, for gene-mode runs, the top enriched marker
 genes:
 
 ```bash
 sptxinsight cme-profile -o ./results --top-types 5 --top-genes 10
+
+# Profile the gene-expression niches instead of the cell-type ones:
+sptxinsight cme-profile -o ./results --cme-mode expression
 ```
 
 It writes `cme-profile-composition.csv` (mean cell-type fractions per CME) and,
-when `expr_` columns are present, `cme-profile-markers.csv`.
+when `expr_` columns are present, `cme-profile-markers.csv` (the `expression` and
+`both` modes append a `-gex`/`-hybrid` suffix). When both cell-type and
+gene-expression niches exist, `cme-profile` also reports their **agreement** —
+the normalized mutual information plus a cross-tab — and writes
+`cme-agreement.csv`, showing where the two definitions of "niche" diverge.
 
 ### Niches as an H-Plot axis
 
 Once niches exist, the experimental `hplot` subcommand can use a CME as the
-**base** region or the **target** quantity via `--base-by cme` / `--target-by
-cme` (alongside the existing `celltype` and `gene` modes). The y-value is then
-the per-layer **fraction of cells belonging to that niche**:
+**base** region or the **target** quantity via `--base-by` / `--target-by`. The
+y-value is then the per-layer **fraction of cells belonging to that niche**:
 
 ```bash
 SPTXINSIGHT_EXPERIMENTAL=1 sptxinsight hplot -o ./results \
   --base-type tumor --base-by celltype \
   --target-type 7 --target-by cme        # fraction of cells in cme_7 per layer
+
+# Gene-expression niches as the target axis:
+SPTXINSIGHT_EXPERIMENTAL=1 sptxinsight hplot -o ./results \
+  --base-type tumor --base-by celltype \
+  --target-type 3 --target-by cmegex     # fraction of cells in gexcme_3 per layer
 ```
 
-`--base-by`/`--target-by` accept `celltype` (default), `gene`, or `cme`;
-`--base-gene-threshold` applies only to `--base-by gene`. CME ids may be given
-as `7` or `cme_7`.
+`--base-by`/`--target-by` accept `celltype` (default), `gene`, or a CME niche
+family — `cme` (cell-type niches), `cmegex` (gene-expression niches), or
+`cmehybrid` (fused). When both axes are CME families they must be the same
+family. `--base-gene-threshold` applies only to `--base-by gene`. Niche ids may
+be given as `7` or `cme_7`/`gexcme_7`.
 
 ## Outputs
 
 ```
 results/
   model-outputs-csv/<id>.csv     # center_x, center_y, prob_<type>, expr_<gene> ...
-  graphs/<id>.h5                 # cached Delaunay graph
-  cme-outputs-csv/cells/<id>.csv # per-cell cme_<n> one-hot labels (after `cme`)
+  graphs/<id>.h5                 # cached Delaunay graph (shared across cme modes)
+  cme-outputs-csv/cells/<id>.csv     # per-cell cme_<n> labels (cme --cme-mode celltype)
+  cme-gex-outputs-csv/cells/<id>.csv # per-cell gexcme_<n> labels (--cme-mode expression)
   cme-profile-composition.csv    # per-niche cell-type fractions (after `cme-profile`)
   cme-profile-markers.csv        # per-niche marker genes (gene-mode only)
+  cme-agreement.csv              # celltype-vs-gene niche cross-tab (when both exist)
   hplot-outputs-csv/hplots/...   # per-sample layer curves
   hplot-outputs.csv              # aggregated, gap-filled layer table
 ```
