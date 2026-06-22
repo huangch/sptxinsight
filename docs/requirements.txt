@@ -1,0 +1,6 @@
+# Documentation build dependencies for Read the Docs.
+#
+# docs/conf.py deliberately uses only stdlib Sphinx extensions
+# (sphinx.ext.intersphinx, sphinx.ext.napoleon, sphinx.ext.viewcode) and the
+# alabaster theme that ships with Sphinx, so no theme/autoapi extras are needed.
+sphinx>=7

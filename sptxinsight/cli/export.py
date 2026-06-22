@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import click
 
-from ..uri_path import URIPath, URIPathType
+from ..uri_path import URIPath
+from ..uri_path import URIPathType
 from ._common import _STORAGE_KWARGS
 
 

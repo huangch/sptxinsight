@@ -18,7 +18,10 @@ the matching ``slide_mpp_lookup`` value is ``1.0`` (see :mod:`sptxinsight.pipeli
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, List, Mapping, Sequence
+from typing import TYPE_CHECKING
+from typing import List
+from typing import Mapping
+from typing import Sequence
 
 import numpy as np
 import pandas as pd
@@ -47,7 +50,7 @@ def _resolve_expression_matrix(adata: "AnnData", which: str):
     """
     token = (which or "X").strip()
     if token.lower().startswith("adata."):
-        token = token[len("adata."):]
+        token = token[len("adata.") :]
     low = token.lower()
     if low in ("", "x"):
         return adata.X, list(adata.var_names)
@@ -96,8 +99,7 @@ def _extract_gene_columns(
         out[gene] = col.astype(float, copy=False)
     if missing:
         raise KeyError(
-            f"Gene(s) not found in expression matrix '{expression_matrix}': "
-            f"{missing}"
+            f"Gene(s) not found in expression matrix '{expression_matrix}': {missing}"
         )
     return out
 
@@ -183,4 +185,4 @@ def anndata_to_contract(
     with csv_path.open("w") as fp:
         out.to_csv(fp, index=False)
 
-    return sorted(c[len("prob_"):] for c in onehot.columns)
+    return sorted(c[len("prob_") :] for c in onehot.columns)

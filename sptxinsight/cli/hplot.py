@@ -11,12 +11,17 @@ from typing import List
 
 import click
 
-from ..insightlib.hplot_generation import hplot_finalize, hplot_generation
-from ..uri_path import URIPath, URIPathType
-from ._common import _STORAGE_KWARGS, csv_to_list
+from ..insightlib.hplot_generation import hplot_finalize
+from ..insightlib.hplot_generation import hplot_generation
+from ..uri_path import URIPath
+from ..uri_path import URIPathType
+from ._common import _STORAGE_KWARGS
+from ._common import csv_to_list
 
 
-def _slide_paths_from_results(results_dir: URIPath) -> tuple[list[URIPath], dict[str, float]]:
+def _slide_paths_from_results(
+    results_dir: URIPath,
+) -> tuple[list[URIPath], dict[str, float]]:
     model_dir = results_dir / "model-outputs-csv"
     if not model_dir.exists():
         raise click.ClickException(
@@ -38,42 +43,108 @@ def _slide_paths_from_results(results_dir: URIPath) -> tuple[list[URIPath], dict
     required=True,
     help="Results directory containing model-outputs-csv/ from a prior ingest.",
 )
-@click.option("--base-type", "base_types", callback=csv_to_list, default=None,
-              help="Base cell type(s)/gene(s)/CME id(s) forming the cluster(s).")
-@click.option("--target-type", "target_types", callback=csv_to_list, default=None,
-              help="Target cell type(s)/gene(s)/CME id(s) whose layer-wise proportion is computed.")
-@click.option("--base-by", default="celltype", show_default=True,
-              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci", "aggregate"]),
-              help="Interpret --base-type as cell types, genes, a CME niche family "
-                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), "
-                   "cci (ligand-receptor score columns from `sptxinsight cci`), or "
-                   "aggregate (object_<name>_prob_<name> columns from `sptxinsight agg`).")
-@click.option("--target-by", default="celltype", show_default=True,
-              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci", "aggregate"]),
-              help="Interpret --target-type as cell types, genes, a CME niche family "
-                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), "
-                   "cci (ligand-receptor score columns from `sptxinsight cci`), or "
-                   "aggregate (object_<name>_prob_<name> columns from `sptxinsight agg`).")
-@click.option("--base-gene-threshold", default=0.0, show_default=True, type=float,
-              help="Mean expression above which a cell counts as base (only for --base-by gene).")
-@click.option("--hplot-max-neighbor-distance", default=25.0, type=click.FloatRange(min=0),
-              help="Maximal distance (um) to a neighboring cell.")
-@click.option("--hplot-k", default=2, type=click.IntRange(min=0),
-              help="Maximal edge distance defining a cell's neighborhood.")
-@click.option("--hplot-n", default=8, type=click.IntRange(min=0),
-              help="Minimal neighborhood size for region determination.")
-@click.option("--hplot-r", default=0.5, type=click.FloatRange(min=0, max=1),
-              help="Minimal ratio of base cells in a neighborhood to include a cell.")
-@click.option("--hplot-range-max", default=None, type=click.IntRange(min=1),
-              help="Maximal layer index toward OUTSIDE for the H-Plot window.")
-@click.option("--hplot-range-min", default=None, type=click.IntRange(max=0),
-              help="Minimal layer index toward INSIDE for the H-Plot window.")
-@click.option("--hplot-samples-with-valid-range-only", is_flag=True, default=False,
-              show_default=True, help="Use only samples with a valid layer range.")
-@click.option("--num-workers", default=8, show_default=True, type=click.IntRange(min=1),
-              help="Number of samples to process concurrently.")
-@click.option("--overwrite", is_flag=True, default=False, show_default=True,
-              help="Overwrite existing results instead of skipping samples.")
+@click.option(
+    "--base-type",
+    "base_types",
+    callback=csv_to_list,
+    default=None,
+    help="Base cell type(s)/gene(s)/CME id(s) forming the cluster(s).",
+)
+@click.option(
+    "--target-type",
+    "target_types",
+    callback=csv_to_list,
+    default=None,
+    help="Target cell type(s)/gene(s)/CME id(s) whose layer-wise proportion is computed.",
+)
+@click.option(
+    "--base-by",
+    default="celltype",
+    show_default=True,
+    type=click.Choice(
+        ["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci", "aggregate"]
+    ),
+    help="Interpret --base-type as cell types, genes, a CME niche family "
+    "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), "
+    "cci (ligand-receptor score columns from `sptxinsight cci`), or "
+    "aggregate (object_<name>_prob_<name> columns from `sptxinsight agg`).",
+)
+@click.option(
+    "--target-by",
+    default="celltype",
+    show_default=True,
+    type=click.Choice(
+        ["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci", "aggregate"]
+    ),
+    help="Interpret --target-type as cell types, genes, a CME niche family "
+    "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), "
+    "cci (ligand-receptor score columns from `sptxinsight cci`), or "
+    "aggregate (object_<name>_prob_<name> columns from `sptxinsight agg`).",
+)
+@click.option(
+    "--base-gene-threshold",
+    default=0.0,
+    show_default=True,
+    type=float,
+    help="Mean expression above which a cell counts as base (only for --base-by gene).",
+)
+@click.option(
+    "--hplot-max-neighbor-distance",
+    default=25.0,
+    type=click.FloatRange(min=0),
+    help="Maximal distance (um) to a neighboring cell.",
+)
+@click.option(
+    "--hplot-k",
+    default=2,
+    type=click.IntRange(min=0),
+    help="Maximal edge distance defining a cell's neighborhood.",
+)
+@click.option(
+    "--hplot-n",
+    default=8,
+    type=click.IntRange(min=0),
+    help="Minimal neighborhood size for region determination.",
+)
+@click.option(
+    "--hplot-r",
+    default=0.5,
+    type=click.FloatRange(min=0, max=1),
+    help="Minimal ratio of base cells in a neighborhood to include a cell.",
+)
+@click.option(
+    "--hplot-range-max",
+    default=None,
+    type=click.IntRange(min=1),
+    help="Maximal layer index toward OUTSIDE for the H-Plot window.",
+)
+@click.option(
+    "--hplot-range-min",
+    default=None,
+    type=click.IntRange(max=0),
+    help="Minimal layer index toward INSIDE for the H-Plot window.",
+)
+@click.option(
+    "--hplot-samples-with-valid-range-only",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Use only samples with a valid layer range.",
+)
+@click.option(
+    "--num-workers",
+    default=8,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Number of samples to process concurrently.",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Overwrite existing results instead of skipping samples.",
+)
 def hplot(
     *,
     results_dir: URIPath,
@@ -98,7 +169,8 @@ def hplot(
     # the matching --cme-mode run (a superset of model-outputs-csv that also
     # carries prob_/expr_ columns). Read from the right family folder whenever an
     # axis is a CME family; both CME axes must use the same family (one file).
-    from ..insightlib.hplot_generation import _CME_FAMILY_SUBDIR, _CCI_SUBDIR
+    from ..insightlib.hplot_generation import _CCI_SUBDIR
+    from ..insightlib.hplot_generation import _CME_FAMILY_SUBDIR
 
     # Axes that read from a non-default cells folder (CME families or CCI). All
     # such axes in one run must agree on a single folder (one file is read).
@@ -150,8 +222,13 @@ def hplot(
     required=True,
     help="Results directory whose per-sample H-Plot CSVs are aggregated.",
 )
-@click.option("--overwrite", is_flag=True, default=False, show_default=True,
-              help="Overwrite the aggregated hplot-outputs.csv if present.")
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Overwrite the aggregated hplot-outputs.csv if present.",
+)
 def hplot_finalize_cmd(*, results_dir: URIPath, overwrite: bool) -> None:
     """Aggregate per-sample H-Plot CSVs into hplot-outputs.csv."""
     hplot_finalize(results_dir, overwrite=overwrite)

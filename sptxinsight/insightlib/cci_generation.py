@@ -33,13 +33,19 @@ fed to distance/niche analyses downstream.
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from pathlib import Path
-from typing import List, Mapping, Optional, Sequence, Tuple
+from typing import List
+from typing import Mapping
+from typing import Optional
+from typing import Sequence
+from typing import Tuple
 
 import numpy as np
 import pandas as pd
-from scipy.sparse import coo_matrix, diags
+from scipy.sparse import coo_matrix
+from scipy.sparse import diags
 
 from ..uri_path import URIPath
 from .graph_cache import get_or_build_delaunay
@@ -56,6 +62,7 @@ _KERNELS = ("exponential", "gaussian", "binary")
 # ---------------------------------------------------------------------------
 # LR pair resolution
 # ---------------------------------------------------------------------------
+
 
 def load_lr_pairs(
     lr_pairs_path: Optional[str | Path | URIPath] = None,
@@ -91,7 +98,7 @@ def load_lr_pairs(
 
     pairs: List[Tuple[str, str]] = []
     seen: set[Tuple[str, str]] = set()
-    for lig, rec in zip(df[lig_col].astype(str), df[rec_col].astype(str)):
+    for lig, rec in zip(df[lig_col].astype(str), df[rec_col].astype(str), strict=False):
         lig, rec = lig.strip(), rec.strip()
         if not lig or not rec or lig.lower() == "nan" or rec.lower() == "nan":
             continue
@@ -129,6 +136,7 @@ def filter_pairs_to_panel(
 # ---------------------------------------------------------------------------
 # Weighted neighbour graph
 # ---------------------------------------------------------------------------
+
 
 def _decay_weights(length_px: np.ndarray, kernel: str, lam: float) -> np.ndarray:
     """Distance-decay edge weights for a 1-hop neighbour graph."""
@@ -173,6 +181,7 @@ def build_weight_matrices(
 # Per-sample scoring
 # ---------------------------------------------------------------------------
 
+
 def _sanitize(sym: str) -> str:
     """Make a gene symbol safe for a column name (keep alnum, collapse rest)."""
     return "".join(ch if ch.isalnum() else "" for ch in sym).upper()
@@ -214,15 +223,17 @@ def score_sample(
     W_sum, W_mean = build_weight_matrices(edges_df, n, kernel, lam_px)
 
     # Resolve expression columns case-insensitively.
-    expr_lower = {c[len("expr_"):].lower(): c for c in df.columns if c.startswith("expr_")}
+    expr_lower = {
+        c[len("expr_") :].lower(): c for c in df.columns if c.startswith("expr_")
+    }
     used_genes = sorted({g.lower() for pr in pairs for g in pr})
     used_genes = [g for g in used_genes if g in expr_lower]
     gidx = {g: i for i, g in enumerate(used_genes)}
     if used_genes:
         E = df[[expr_lower[g] for g in used_genes]].to_numpy(dtype=np.float64)
         E = np.nan_to_num(E)
-        NS = W_sum @ E    # neighbour weighted sum, per gene  (n, G)
-        NM = W_mean @ E   # neighbour weighted mean, per gene (n, G)
+        NS = W_sum @ E  # neighbour weighted sum, per gene  (n, G)
+        NM = W_mean @ E  # neighbour weighted mean, per gene (n, G)
     else:
         E = NS = NM = np.zeros((n, 0))
 
@@ -251,6 +262,7 @@ def score_sample(
 # Cohort driver
 # ---------------------------------------------------------------------------
 
+
 def cci_generation(
     results_dir: URIPath,
     *,
@@ -274,7 +286,9 @@ def cci_generation(
 
     model_dir = results_dir / "model-outputs-csv"
     if not model_dir.exists():
-        raise FileNotFoundError(f"{model_dir} not found; run `sptxinsight ingest` first.")
+        raise FileNotFoundError(
+            f"{model_dir} not found; run `sptxinsight ingest` first."
+        )
     stems = sorted(p.stem for p in model_dir.iterdir() if p.suffix.lower() == ".csv")
     if not stems:
         raise FileNotFoundError(f"No model-output CSVs under {model_dir}.")
@@ -282,7 +296,7 @@ def cci_generation(
     # Resolve pairs against the panel of the first sample (shared across cohort).
     with (model_dir / f"{stems[0]}.csv").open("r", encoding="utf-8") as fp:
         head = pd.read_csv(fp, nrows=1)
-    panel_genes = [c[len("expr_"):] for c in head.columns if c.startswith("expr_")]
+    panel_genes = [c[len("expr_") :] for c in head.columns if c.startswith("expr_")]
     if not panel_genes:
         raise ValueError(
             f"Sample {stems[0]!r} has no expr_ columns; CCI needs transcript data."
@@ -294,7 +308,9 @@ def cci_generation(
             "No ligand-receptor pairs have both genes in the sample panel "
             f"({len(panel_genes)} genes). Provide --lr-pairs/--genes that match."
         )
-    _logger.info("CCI: %d LR pair(s) within the %d-gene panel.", len(pairs), len(panel_genes))
+    _logger.info(
+        "CCI: %d LR pair(s) within the %d-gene panel.", len(pairs), len(panel_genes)
+    )
 
     out_dir = results_dir / "cci-outputs-csv"
     out_dir.mkdir(exist_ok=True)
@@ -314,7 +330,8 @@ def cci_generation(
         if slide_mpp_lookup:
             mpp = slide_mpp_lookup.get(stem) or 1.0
         scored = score_sample(
-            df, pairs,
+            df,
+            pairs,
             slide_id=stem,
             mpp_um_per_px=mpp,
             d_max_um=d_max_um,
@@ -338,12 +355,18 @@ def cci_generation(
             body, direction = body.rsplit("_", 1)
             _, lig, rec = body.split("_", 2)
             v = scored[col].to_numpy()
-            rows.append({
-                "sample": stem, "ligand": lig, "receptor": rec,
-                "direction": direction, "aggregation": agg,
-                "n_cells": len(v), "mean": float(np.mean(v)),
-                "frac_pos": float(np.mean(v > 0)),
-            })
+            rows.append(
+                {
+                    "sample": stem,
+                    "ligand": lig,
+                    "receptor": rec,
+                    "direction": direction,
+                    "aggregation": agg,
+                    "n_cells": len(v),
+                    "mean": float(np.mean(v)),
+                    "frac_pos": float(np.mean(v > 0)),
+                }
+            )
         return pd.DataFrame(rows)
 
     if num_workers and num_workers > 1:

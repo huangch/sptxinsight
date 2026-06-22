@@ -25,7 +25,8 @@ from __future__ import annotations
 import click
 import pandas as pd
 
-from ..uri_path import URIPath, URIPathType
+from ..uri_path import URIPath
+from ..uri_path import URIPathType
 from ._common import _STORAGE_KWARGS
 
 
@@ -60,45 +61,103 @@ def _slide_paths_from_results(results_dir: URIPath):
         "optimal number is chosen automatically via a Leiden sweep."
     ),
 )
-@click.option("--cme-k-hops", default=2, show_default=True, type=click.IntRange(min=0),
-              help="Number of neighborhood hops for the composition features.")
-@click.option("--cme-max-edge-len-um", default=25.0, show_default=True, type=click.FloatRange(min=0),
-              help="Maximal Delaunay edge length (um) when building the cell graph.")
-@click.option("--cme-max-cell-radius-um", default=15.0, show_default=True, type=click.FloatRange(min=0),
-              help="Maximal cell radius (um) used when merging annotation-level regions.")
-@click.option("--cme-epochs", default=300, show_default=True, type=click.IntRange(min=1),
-              help="DGI encoder training epochs.")
-@click.option("--cme-soft", is_flag=True, default=False, show_default=True,
-              help="Use soft (probability) composition features instead of hard argmax labels.")
-@click.option("--cme-mode", default="celltype", show_default=True,
-              type=click.Choice(["celltype", "expression", "both"]),
-              help="Feature source for the niches and output namespace: 'celltype' "
-                   "(k-hop cell-type composition -> cme-outputs-csv/, cme_ columns), "
-                   "'expression' (k-hop mean gene expression -> cme-gex-outputs-csv/, "
-                   "gexcme_ columns), or 'both' (fused -> cme-hybrid-outputs-csv/, "
-                   "hcme_ columns). Modes write to separate folders so they coexist.")
-@click.option("--cme-batch-correct", default="none", show_default=True,
-              type=click.Choice(["none", "center", "harmony"]),
-              help="Cross-sample correction of the DGI embeddings before clustering: "
-                   "'center' (per-sample mean-centering, no extra deps) or 'harmony' "
-                   "(needs the optional harmonypy package). Use the technical unit "
-                   "(sample/run), never a biological condition, as the batch.")
-@click.option("--cme-expression", is_flag=True, default=False, show_default=True,
-              help="[deprecated] Alias for --cme-mode both (augment composition with "
-                   "k-hop mean gene expression). Prefer --cme-mode.")
-@click.option("--cme-pca-components", default=50, show_default=True, type=click.IntRange(min=2),
-              help="Number of shared PCA components the expression features are "
-                   "reduced to before k-hop aggregation (expression/both modes). "
-                   "Ignored for celltype mode and when --disable-pca is set.")
-@click.option("--disable-pca", is_flag=True, default=False, show_default=True,
-              help="Disable the shared PCA reduction of expression features and feed "
-                   "all genes into the encoder. PCA is on by default because the raw "
-                   "gene panel is high-dimensional and redundant.")
-@click.option("--cme-regions", is_flag=True, default=False, show_default=True,
-              help="Also merge per-cell labels into annotation-level regions "
-                   "(requires the optional geopandas/shapely extra).")
-@click.option("--overwrite", is_flag=True, default=False, show_default=True,
-              help="Delete cached checkpoints and recompute all CME outputs from scratch.")
+@click.option(
+    "--cme-k-hops",
+    default=2,
+    show_default=True,
+    type=click.IntRange(min=0),
+    help="Number of neighborhood hops for the composition features.",
+)
+@click.option(
+    "--cme-max-edge-len-um",
+    default=25.0,
+    show_default=True,
+    type=click.FloatRange(min=0),
+    help="Maximal Delaunay edge length (um) when building the cell graph.",
+)
+@click.option(
+    "--cme-max-cell-radius-um",
+    default=15.0,
+    show_default=True,
+    type=click.FloatRange(min=0),
+    help="Maximal cell radius (um) used when merging annotation-level regions.",
+)
+@click.option(
+    "--cme-epochs",
+    default=300,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="DGI encoder training epochs.",
+)
+@click.option(
+    "--cme-soft",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Use soft (probability) composition features instead of hard argmax labels.",
+)
+@click.option(
+    "--cme-mode",
+    default="celltype",
+    show_default=True,
+    type=click.Choice(["celltype", "expression", "both"]),
+    help="Feature source for the niches and output namespace: 'celltype' "
+    "(k-hop cell-type composition -> cme-outputs-csv/, cme_ columns), "
+    "'expression' (k-hop mean gene expression -> cme-gex-outputs-csv/, "
+    "gexcme_ columns), or 'both' (fused -> cme-hybrid-outputs-csv/, "
+    "hcme_ columns). Modes write to separate folders so they coexist.",
+)
+@click.option(
+    "--cme-batch-correct",
+    default="none",
+    show_default=True,
+    type=click.Choice(["none", "center", "harmony"]),
+    help="Cross-sample correction of the DGI embeddings before clustering: "
+    "'center' (per-sample mean-centering, no extra deps) or 'harmony' "
+    "(needs the optional harmonypy package). Use the technical unit "
+    "(sample/run), never a biological condition, as the batch.",
+)
+@click.option(
+    "--cme-expression",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="[deprecated] Alias for --cme-mode both (augment composition with "
+    "k-hop mean gene expression). Prefer --cme-mode.",
+)
+@click.option(
+    "--cme-pca-components",
+    default=50,
+    show_default=True,
+    type=click.IntRange(min=2),
+    help="Number of shared PCA components the expression features are "
+    "reduced to before k-hop aggregation (expression/both modes). "
+    "Ignored for celltype mode and when --disable-pca is set.",
+)
+@click.option(
+    "--disable-pca",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Disable the shared PCA reduction of expression features and feed "
+    "all genes into the encoder. PCA is on by default because the raw "
+    "gene panel is high-dimensional and redundant.",
+)
+@click.option(
+    "--cme-regions",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Also merge per-cell labels into annotation-level regions "
+    "(requires the optional geopandas/shapely extra).",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Delete cached checkpoints and recompute all CME outputs from scratch.",
+)
 def cme(
     *,
     results_dir: URIPath,
@@ -120,7 +179,8 @@ def cme(
     # Imported inside the callback (not at module import) so the heavy torch /
     # torch_geometric stack is only loaded when CME analysis is actually run,
     # keeping `sptxinsight --help` and other subcommands fast.
-    from ..insightlib.cme_generation import _CME_MODE_SPEC, cme_generation
+    from ..insightlib.cme_generation import _CME_MODE_SPEC
+    from ..insightlib.cme_generation import cme_generation
 
     # Backward-compat: --cme-expression is an alias for --cme-mode both.
     if cme_expression and cme_mode == "celltype":
@@ -165,23 +225,51 @@ def cme(
     required=True,
     help="Results directory containing cme-outputs-csv/cells/ from `sptxinsight cme`.",
 )
-@click.option("--cme-mode", default="celltype", show_default=True,
-              type=click.Choice(["celltype", "expression", "both"]),
-              help="Which niche family to profile (matches the `cme --cme-mode` run).")
-@click.option("--top-genes", default=10, show_default=True, type=click.IntRange(min=1),
-              help="Number of top enriched marker genes to report per CME.")
-@click.option("--top-types", default=5, show_default=True, type=click.IntRange(min=1),
-              help="Number of top cell types to summarise per CME.")
-@click.option("--agreement/--no-agreement", "agreement", default=None,
-              help="Also report celltype-vs-gene niche agreement (NMI + cross-tab). "
-                   "Default: auto when both cme-outputs-csv and cme-gex-outputs-csv exist.")
-def cme_profile_cmd(*, results_dir: URIPath, cme_mode: str, top_genes: int,
-                    top_types: int, agreement: bool | None) -> None:
+@click.option(
+    "--cme-mode",
+    default="celltype",
+    show_default=True,
+    type=click.Choice(["celltype", "expression", "both"]),
+    help="Which niche family to profile (matches the `cme --cme-mode` run).",
+)
+@click.option(
+    "--top-genes",
+    default=10,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Number of top enriched marker genes to report per CME.",
+)
+@click.option(
+    "--top-types",
+    default=5,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Number of top cell types to summarise per CME.",
+)
+@click.option(
+    "--agreement/--no-agreement",
+    "agreement",
+    default=None,
+    help="Also report celltype-vs-gene niche agreement (NMI + cross-tab). "
+    "Default: auto when both cme-outputs-csv and cme-gex-outputs-csv exist.",
+)
+def cme_profile_cmd(
+    *,
+    results_dir: URIPath,
+    cme_mode: str,
+    top_genes: int,
+    top_types: int,
+    agreement: bool | None,
+) -> None:
     """Summarise each CME's cell composition and marker genes to help name niches."""
-    from ..insightlib.cme_profile import cme_agreement, cme_profile
+    from ..insightlib.cme_profile import cme_agreement
+    from ..insightlib.cme_profile import cme_profile
 
     comp, markers = cme_profile(
-        str(results_dir), top_genes=top_genes, top_types=top_types, write=True,
+        str(results_dir),
+        top_genes=top_genes,
+        top_types=top_types,
+        write=True,
         mode=cme_mode,
     )
 
@@ -193,15 +281,21 @@ def cme_profile_cmd(*, results_dir: URIPath, cme_mode: str, top_genes: int,
     if markers is not None:
         click.secho("\nTop enriched marker genes per CME:\n", fg="green")
         for cme_id, grp in markers.groupby("cme", sort=False):
-            top = ", ".join(f"{r.gene}({r.log2_enrichment:+.1f})" for r in grp.itertuples())
+            top = ", ".join(
+                f"{r.gene}({r.log2_enrichment:+.1f})" for r in grp.itertuples()
+            )
             click.echo(f"  {cme_id}: {top}")
     else:
         click.secho(
             "\n(No expr_ columns found; run `sptxinsight cme` on gene-mode samples "
-            "for marker-gene fingerprints.)\n", fg="yellow")
+            "for marker-gene fingerprints.)\n",
+            fg="yellow",
+        )
 
-    click.secho(f"\nWrote cme-profile-composition*.csv (and markers, if any) to {results_dir}\n",
-                fg="green")
+    click.secho(
+        f"\nWrote cme-profile-composition*.csv (and markers, if any) to {results_dir}\n",
+        fg="green",
+    )
 
     # ---- celltype-vs-gene niche agreement (auto when both families exist) ----
     if agreement is not False:
@@ -211,13 +305,16 @@ def cme_profile_cmd(*, results_dir: URIPath, cme_mode: str, top_genes: int,
                 click.secho(
                     "\n(Agreement needs both cme-outputs-csv/ and cme-gex-outputs-csv/; "
                     "run `cme --cme-mode celltype` and `cme --cme-mode expression` first.)\n",
-                    fg="yellow")
+                    fg="yellow",
+                )
         else:
             nmi, crosstab = result
             click.secho(
                 f"\nCelltype-vs-gene niche agreement: NMI = {nmi:.3f}\n"
                 f"(0 = independent labelings, 1 = identical). Cross-tab "
-                f"(rows=celltype niche, cols=gene niche):\n", fg="green")
+                f"(rows=celltype niche, cols=gene niche):\n",
+                fg="green",
+            )
             with pd.option_context("display.width", 200):
                 click.echo(crosstab.to_string())
             click.secho(f"\nWrote cme-agreement.csv to {results_dir}\n", fg="green")

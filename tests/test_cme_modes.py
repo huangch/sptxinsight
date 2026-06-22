@@ -11,18 +11,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sptxinsight.insightlib.cme_profile import (
-    _MODE_SPEC,
-    _cme_columns,
-    _nmi,
-    cme_agreement,
-    cme_profile,
-)
-
+from sptxinsight.insightlib.cme_profile import _MODE_SPEC
+from sptxinsight.insightlib.cme_profile import _cme_columns
+from sptxinsight.insightlib.cme_profile import _nmi
+from sptxinsight.insightlib.cme_profile import cme_agreement
+from sptxinsight.insightlib.cme_profile import cme_profile
 
 # --------------------------------------------------------------------------- #
 # Mode-spec namespacing
 # --------------------------------------------------------------------------- #
+
 
 def test_mode_spec_is_distinct_and_celltype_unchanged():
     subdirs = {m: s[0] for m, s in _MODE_SPEC.items()}
@@ -44,6 +42,7 @@ def test_cme_columns_orders_by_index_for_each_prefix():
 # NMI
 # --------------------------------------------------------------------------- #
 
+
 def test_nmi_identical_labels_is_one():
     a = np.array([0, 0, 1, 1, 2, 2])
     assert _nmi(a, a.copy()) == pytest.approx(1.0, abs=1e-9)
@@ -59,6 +58,7 @@ def test_nmi_independent_labels_is_near_zero():
 # --------------------------------------------------------------------------- #
 # cme_profile + cme_agreement on a tiny synthetic results dir
 # --------------------------------------------------------------------------- #
+
 
 def _write_cells(path, prefix, labels, n_types=2):
     """Write a minimal cells CSV: prob_ columns + one-hot <prefix> columns."""
@@ -76,8 +76,9 @@ def _write_cells(path, prefix, labels, n_types=2):
 
 def test_cme_profile_reads_gene_mode_namespace(tmp_path):
     labels = [0, 0, 1, 1, 2, 0]
-    _write_cells(tmp_path / "cme-gex-outputs-csv" / "cells" / "s1.csv",
-                 "gexcme_", labels)
+    _write_cells(
+        tmp_path / "cme-gex-outputs-csv" / "cells" / "s1.csv", "gexcme_", labels
+    )
     comp, markers = cme_profile(tmp_path, mode="expression", write=True)
     assert list(comp.index) == ["gexcme_0", "gexcme_1", "gexcme_2"]
     assert comp.loc["gexcme_0", "n_cells"] == 3
@@ -106,6 +107,7 @@ def test_cme_agreement_returns_none_without_both_families(tmp_path):
 # --------------------------------------------------------------------------- #
 # Batch correction (torch-backed module; skip if unavailable)
 # --------------------------------------------------------------------------- #
+
 
 def test_center_per_sample_equalizes_means_preserves_grand_mean():
     pytest.importorskip("torch")

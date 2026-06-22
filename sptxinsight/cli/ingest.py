@@ -6,8 +6,10 @@ import click
 
 from ..adapt import anndata_to_contract
 from ..io import read_sample
-from ..uri_path import URIPath, URIPathType
-from ._common import _STORAGE_KWARGS, enumerate_sample_uris
+from ..uri_path import URIPath
+from ..uri_path import URIPathType
+from ._common import _STORAGE_KWARGS
+from ._common import enumerate_sample_uris
 
 
 @click.command()

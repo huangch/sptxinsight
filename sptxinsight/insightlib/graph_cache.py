@@ -25,7 +25,8 @@ import h5py
 import numpy as np
 import pandas as pd
 
-from .insight_helpers import _delaunay_full, prune_edges
+from .insight_helpers import _delaunay_full
+from .insight_helpers import prune_edges
 
 if TYPE_CHECKING:
     from ..uri_path import URIPath
@@ -36,6 +37,7 @@ _logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _cache_path(graph_cache_dir: Path | URIPath, slide_id: str) -> Path:
     return Path(str(graph_cache_dir)) / f"{slide_id}.h5"
@@ -128,6 +130,7 @@ def read_graph_cache(h5path: Path) -> dict:
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 def get_or_build_delaunay(
     graph_cache_dir: Path | URIPath,
     slide_id: str,
@@ -179,8 +182,10 @@ def get_or_build_delaunay(
                 pass
         else:
             return prune_edges(
-                data["edges_source"], data["edges_target"],
-                data["edges_length"], max_edge_length_px,
+                data["edges_source"],
+                data["edges_target"],
+                data["edges_length"],
+                max_edge_length_px,
             )
 
     _logger.debug("Graph cache MISS for %s — building", slide_id)
@@ -218,6 +223,7 @@ def get_or_build_delaunay(
 # The base graph is written with mode "w", so rebuilding the Delaunay graph
 # (different cells/mpp) drops every derived ``agg/`` subgroup automatically.
 # ---------------------------------------------------------------------------
+
 
 def make_aggregate_params_key(
     *,
@@ -295,11 +301,23 @@ def write_aggregate_cache(
         grp = agg_root.create_group(name)
         grp.attrs["params_key"] = params_key
         grp.attrs["num_cells"] = int(num_cells)
-        grp.create_dataset("aggregate_centers", data=np.asarray(aggregate_centers, dtype=np.float64))
-        grp.create_dataset("aggregate_sizes", data=np.asarray(aggregate_sizes, dtype=np.int64))
-        grp.create_dataset("cell_to_aggregate", data=np.asarray(cell_to_aggregate, dtype=np.int64))
-        grp.create_dataset("quotient_edges_source", data=np.asarray(quotient_edges_source, dtype=np.int64))
-        grp.create_dataset("quotient_edges_target", data=np.asarray(quotient_edges_target, dtype=np.int64))
+        grp.create_dataset(
+            "aggregate_centers", data=np.asarray(aggregate_centers, dtype=np.float64)
+        )
+        grp.create_dataset(
+            "aggregate_sizes", data=np.asarray(aggregate_sizes, dtype=np.int64)
+        )
+        grp.create_dataset(
+            "cell_to_aggregate", data=np.asarray(cell_to_aggregate, dtype=np.int64)
+        )
+        grp.create_dataset(
+            "quotient_edges_source",
+            data=np.asarray(quotient_edges_source, dtype=np.int64),
+        )
+        grp.create_dataset(
+            "quotient_edges_target",
+            data=np.asarray(quotient_edges_target, dtype=np.int64),
+        )
 
 
 def read_aggregate_cache(h5path: Path, name: str) -> dict:

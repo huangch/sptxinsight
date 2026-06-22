@@ -7,8 +7,11 @@ from typing import List
 import click
 
 from ..pipeline import run_hplot
-from ..uri_path import URIPath, URIPathType
-from ._common import _STORAGE_KWARGS, csv_to_list, enumerate_sample_uris
+from ..uri_path import URIPath
+from ..uri_path import URIPathType
+from ._common import _STORAGE_KWARGS
+from ._common import csv_to_list
+from ._common import enumerate_sample_uris
 
 
 @click.command()
@@ -26,8 +29,7 @@ from ._common import _STORAGE_KWARGS, csv_to_list, enumerate_sample_uris
     "--results-dir",
     type=URIPathType(exists=False, **_STORAGE_KWARGS),
     required=True,
-    help="Directory to store results (model-outputs-csv/, graphs/, "
-    "hplot-outputs.csv).",
+    help="Directory to store results (model-outputs-csv/, graphs/, hplot-outputs.csv).",
 )
 @click.option(
     "--cell-type-key",

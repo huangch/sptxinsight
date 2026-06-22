@@ -16,19 +16,20 @@ run without the deep-learning ``[cme]`` extra.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List
+from typing import Optional
+from typing import Tuple
 
 import numpy as np
 import pandas as pd
-
 
 # Mode -> (cells subdir, one-hot column prefix, output filename suffix). Kept in
 # sync with ``_CME_MODE_SPEC`` in cme_generation.py but defined locally so this
 # module stays free of the heavy deep-learning ``[cme]`` extra.
 _MODE_SPEC = {
-    "celltype":   ("cme-outputs-csv",        "cme_",    ""),
-    "expression": ("cme-gex-outputs-csv",    "gexcme_", "-gex"),
-    "both":       ("cme-hybrid-outputs-csv", "hcme_",   "-hybrid"),
+    "celltype": ("cme-outputs-csv", "cme_", ""),
+    "expression": ("cme-gex-outputs-csv", "gexcme_", "-gex"),
+    "both": ("cme-hybrid-outputs-csv", "hcme_", "-hybrid"),
 }
 
 
@@ -38,7 +39,7 @@ def _cme_columns(columns: List[str], prefix: str = "cme_") -> List[str]:
 
     def _idx(c: str) -> int:
         try:
-            return int(c[len(prefix):])
+            return int(c[len(prefix) :])
         except (IndexError, ValueError):
             return 1 << 30
 
@@ -99,8 +100,16 @@ def cme_profile(
         if not assigned.any():
             continue
         lab = oh[assigned].argmax(axis=1)
-        P = df.loc[assigned, prob_cols].fillna(0).to_numpy(dtype=np.float64) if prob_cols else None
-        E = df.loc[assigned, expr_cols].fillna(0).to_numpy(dtype=np.float64) if expr_cols else None
+        P = (
+            df.loc[assigned, prob_cols].fillna(0).to_numpy(dtype=np.float64)
+            if prob_cols
+            else None
+        )
+        E = (
+            df.loc[assigned, expr_cols].fillna(0).to_numpy(dtype=np.float64)
+            if expr_cols
+            else None
+        )
         for k in range(K):
             m = lab == k
             nk = int(m.sum())
@@ -118,13 +127,13 @@ def cme_profile(
     # ---- composition table ----
     comp = pd.DataFrame(
         sum_prob / denom,
-        columns=[c[len("prob_"):] for c in prob_cols],
+        columns=[c[len("prob_") :] for c in prob_cols],
         index=[f"{prefix}{k}" for k in range(K)],
     )
     comp.insert(0, "n_cells", counts.astype(int))
     comp.insert(1, "frac", counts / total)
     if prob_cols:
-        type_names = [c[len("prob_"):] for c in prob_cols]
+        type_names = [c[len("prob_") :] for c in prob_cols]
         comp["top_types"] = [
             ", ".join(
                 f"{type_names[j]}={comp.iloc[k][type_names[j]]:.2f}"
@@ -140,24 +149,28 @@ def cme_profile(
         global_mean = sum_expr.sum(axis=0) / total
         eps = 1e-6
         enr = np.log2((mean_expr + eps) / (global_mean[None, :] + eps))
-        genes = [c[len("expr_"):] for c in expr_cols]
+        genes = [c[len("expr_") :] for c in expr_cols]
         rows = []
         for k in range(K):
             order = np.argsort(-enr[k])[:top_genes]
             for rank, gi in enumerate(order, start=1):
-                rows.append({
-                    "cme": f"{prefix}{k}",
-                    "rank": rank,
-                    "gene": genes[gi],
-                    "mean_expr": float(mean_expr[k, gi]),
-                    "log2_enrichment": float(enr[k, gi]),
-                })
+                rows.append(
+                    {
+                        "cme": f"{prefix}{k}",
+                        "rank": rank,
+                        "gene": genes[gi],
+                        "mean_expr": float(mean_expr[k, gi]),
+                        "log2_enrichment": float(enr[k, gi]),
+                    }
+                )
         markers = pd.DataFrame(rows)
 
     if write:
         comp.to_csv(results_dir / f"cme-profile-composition{suffix}.csv")
         if markers is not None:
-            markers.to_csv(results_dir / f"cme-profile-markers{suffix}.csv", index=False)
+            markers.to_csv(
+                results_dir / f"cme-profile-markers{suffix}.csv", index=False
+            )
 
     return comp, markers
 
@@ -243,4 +256,3 @@ def cme_agreement(
         crosstab.to_csv(results_dir / "cme-agreement.csv")
 
     return nmi, crosstab
-

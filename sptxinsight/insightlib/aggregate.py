@@ -25,15 +25,13 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
-from .insight_helpers import (
-    identify_region_by_cell_function_enrichment,
-    k_hop_neighbors,
-)
-
+from .insight_helpers import identify_region_by_cell_function_enrichment
+from .insight_helpers import k_hop_neighbors
 
 # ---------------------------------------------------------------------------
 # Aggregate detection
 # ---------------------------------------------------------------------------
+
 
 def _induced_region_components(
     is_region: np.ndarray,
@@ -208,6 +206,7 @@ def identify_aggregates(
 # Quotient-graph contraction
 # ---------------------------------------------------------------------------
 
+
 def contract_to_quotient(
     aggregate_id: np.ndarray,
     edges_df: pd.DataFrame,
@@ -273,6 +272,7 @@ def contract_to_quotient(
 # Per-aggregate feature table
 # ---------------------------------------------------------------------------
 
+
 def _convex_hull_area_px2(points: np.ndarray) -> float:
     """Convex-hull area of a point set in pixel^2 (0 for < 3 distinct points)."""
     if len(points) < 3:
@@ -318,7 +318,9 @@ def aggregate_features(
                 nodes_df[prob_columns].idxmax(axis=1).str.removeprefix("prob_")
             )
         else:
-            predicted_labels = pd.Series(["unknown"] * len(nodes_df), index=nodes_df.index)
+            predicted_labels = pd.Series(
+                ["unknown"] * len(nodes_df), index=nodes_df.index
+            )
     else:
         predicted_labels = predicted_labels.astype(str).str.removeprefix("prob_")
 
@@ -348,8 +350,12 @@ def aggregate_features(
             row[f"composition_{t}_frac"] = float(np.mean(member_labels == t))
         rows.append(row)
 
-    columns = (
-        ["aggregate_id", "slide_id", "n_cells", "area_um2", "center_x", "center_y"]
-        + [f"composition_{t}_frac" for t in all_types]
-    )
+    columns = [
+        "aggregate_id",
+        "slide_id",
+        "n_cells",
+        "area_um2",
+        "center_x",
+        "center_y",
+    ] + [f"composition_{t}_frac" for t in all_types]
     return pd.DataFrame(rows, columns=columns)

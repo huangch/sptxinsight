@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from typing import List
 
-from ..uri_path import URIPath, _LIST_SCHEMES
+from ..uri_path import _LIST_SCHEMES
+from ..uri_path import URIPath
 from ._paths import default_storage_kwargs
 
 _STORAGE_KWARGS = default_storage_kwargs()

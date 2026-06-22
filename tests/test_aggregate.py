@@ -13,17 +13,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sptxinsight.insightlib.agg_generation import agg_generation, membership_column
-from sptxinsight.insightlib.aggregate import (
-    aggregate_features,
-    contract_to_quotient,
-    identify_aggregates,
-)
+from sptxinsight.insightlib.agg_generation import agg_generation
+from sptxinsight.insightlib.agg_generation import membership_column
+from sptxinsight.insightlib.aggregate import aggregate_features
+from sptxinsight.insightlib.aggregate import contract_to_quotient
+from sptxinsight.insightlib.aggregate import identify_aggregates
 from sptxinsight.insightlib.graph_cache import read_aggregate_cache
-from sptxinsight.insightlib.insight_helpers import (
-    compute_cell_center_points,
-    delaunay_triangulation,
-)
+from sptxinsight.insightlib.insight_helpers import compute_cell_center_points
+from sptxinsight.insightlib.insight_helpers import delaunay_triangulation
 from sptxinsight.uri_path import URIPath
 
 # ---------------------------------------------------------------------------

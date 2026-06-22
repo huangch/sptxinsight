@@ -23,26 +23,26 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import List, Mapping, Sequence
+from typing import List
+from typing import Mapping
+from typing import Sequence
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
 from .. import errors
-from ..cancel import cancellable_as_completed, critical_section
-from ..io._wsi_stub import _validate_wsi_directory, get_avg_mpp
+from ..cancel import cancellable_as_completed
+from ..cancel import critical_section
+from ..io._wsi_stub import _validate_wsi_directory
+from ..io._wsi_stub import get_avg_mpp
 from ..uri_path import URIPath
-from .aggregate import (
-    aggregate_features,
-    contract_to_quotient,
-    identify_aggregates,
-)
-from .graph_cache import (
-    get_or_build_delaunay,
-    make_aggregate_params_key,
-    write_aggregate_cache,
-)
+from .aggregate import aggregate_features
+from .aggregate import contract_to_quotient
+from .aggregate import identify_aggregates
+from .graph_cache import get_or_build_delaunay
+from .graph_cache import make_aggregate_params_key
+from .graph_cache import write_aggregate_cache
 from .insight_helpers import compute_cell_center_points
 
 _logger = logging.getLogger(__name__)
@@ -113,8 +113,11 @@ def _worker(
 
     if graph_cache_dir is not None:
         edges_df = get_or_build_delaunay(
-            graph_cache_dir, slide_id, np.asarray(centers, dtype=np.int32),
-            mpp, max_neighbor_distance_px,
+            graph_cache_dir,
+            slide_id,
+            np.asarray(centers, dtype=np.int32),
+            mpp,
+            max_neighbor_distance_px,
         )
     else:
         from .insight_helpers import delaunay_triangulation
@@ -122,14 +125,22 @@ def _worker(
         edges_df = delaunay_triangulation(centers, max_neighbor_distance_px)
 
     aggregate_id = identify_aggregates(
-        df, list(agg_types), edges_df,
-        k=k, N=N, R=R, min_size=min_size,
+        df,
+        list(agg_types),
+        edges_df,
+        k=k,
+        N=N,
+        R=R,
+        min_size=min_size,
         predicted_labels=predicted_labels,
     )
 
     quotient = contract_to_quotient(aggregate_id, edges_df, centers)
     features_df = aggregate_features(
-        df, aggregate_id, slide_id=slide_id, mpp=mpp,
+        df,
+        aggregate_id,
+        slide_id=slide_id,
+        mpp=mpp,
         predicted_labels=predicted_labels.str.removeprefix("prob_"),
     )
 
@@ -151,13 +162,18 @@ def _worker(
     # --- 3. quotient graph -> agg/<name>/ subgroup in graphs/<slide>.h5 ------
     if graph_cache_dir is not None:
         params_key = make_aggregate_params_key(
-            agg_types=list(agg_types), k=k, N=N, R=R,
-            min_size=min_size, max_edge_length_px=max_neighbor_distance_px,
+            agg_types=list(agg_types),
+            k=k,
+            N=N,
+            R=R,
+            min_size=min_size,
+            max_edge_length_px=max_neighbor_distance_px,
         )
         h5path = Path(str(graph_cache_dir)) / f"{slide_id}.h5"
         try:
             write_aggregate_cache(
-                h5path, name,
+                h5path,
+                name,
                 params_key=params_key,
                 num_cells=len(df),
                 aggregate_centers=quotient["aggregate_centers"],
@@ -216,7 +232,9 @@ def agg_generation(
         )
 
     if slide_paths is not None:
-        normalized = [p if isinstance(p, URIPath) else URIPath(str(p)) for p in slide_paths]
+        normalized = [
+            p if isinstance(p, URIPath) else URIPath(str(p)) for p in slide_paths
+        ]
     elif wsi_dir_path is not None:
         normalized = [p for p in wsi_dir_path.iterdir() if p.is_file()]
     else:

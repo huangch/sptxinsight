@@ -15,19 +15,24 @@ from __future__ import annotations
 
 import math
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from typing import List
 
 import click
 import pandas as pd
 from tqdm import tqdm
 
-from ..insightlib.agg_generation import agg_generation, membership_column
-from ..uri_path import URIPath, URIPathType
+from ..insightlib.agg_generation import agg_generation
+from ..insightlib.agg_generation import membership_column
+from ..uri_path import URIPath
+from ..uri_path import URIPathType
 from ._common import _STORAGE_KWARGS
 
 
-def _slide_paths_from_results(results_dir: URIPath) -> tuple[list[URIPath], dict[str, float]]:
+def _slide_paths_from_results(
+    results_dir: URIPath,
+) -> tuple[list[URIPath], dict[str, float]]:
     model_dir = results_dir / "model-outputs-csv"
     if not model_dir.exists():
         raise click.ClickException(
@@ -217,7 +222,9 @@ def agg(
     # --- name-collision guard: cell-type labels, CME ids, region_/object_ tags ---
     headers = _collect_headers(model_output_dir, num_workers)
     cell_types = {
-        c.lower().removeprefix("prob_") for c in headers if c.lower().startswith("prob_")
+        c.lower().removeprefix("prob_")
+        for c in headers
+        if c.lower().startswith("prob_")
     }
     if name in cell_types:
         raise click.ClickException(
@@ -226,7 +233,8 @@ def agg(
         )
     own_col = membership_column(name).lower()
     colliding = [
-        c for c in headers
+        c
+        for c in headers
         if c.lower().startswith((f"object_{name}_", f"region_{name}_", f"cme_{name}"))
         and c.lower() != own_col
     ]

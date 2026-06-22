@@ -14,11 +14,13 @@ image is ever opened.
 from __future__ import annotations
 
 import logging
-from typing import List, Sequence
+from typing import List
+from typing import Sequence
 
 from .adapt import anndata_to_contract
+from .insightlib.hplot_generation import hplot_finalize
+from .insightlib.hplot_generation import hplot_generation
 from .io import read_sample
-from .insightlib.hplot_generation import hplot_finalize, hplot_generation
 from .uri_path import URIPath
 
 _logger = logging.getLogger(__name__)
@@ -154,6 +156,7 @@ def run_hplot(
     # gap-filled table from the per-sample CSVs (cheap + idempotent).
     hplot_finalize(results_dir, overwrite=True)
     if failed:
-        _logger.warning("H-Plot generation failed for %d sample(s): %s",
-                        len(failed), failed)
+        _logger.warning(
+            "H-Plot generation failed for %d sample(s): %s", len(failed), failed
+        )
     return failed

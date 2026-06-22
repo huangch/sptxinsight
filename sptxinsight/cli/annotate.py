@@ -16,8 +16,10 @@ from collections import Counter
 import click
 
 from ..io import read_sample
-from ..uri_path import URIPath, URIPathType
-from ._common import _STORAGE_KWARGS, enumerate_sample_uris
+from ..uri_path import URIPath
+from ..uri_path import URIPathType
+from ._common import _STORAGE_KWARGS
+from ._common import enumerate_sample_uris
 
 
 @click.command()
@@ -62,7 +64,9 @@ def annotate(*, sptx_dir: URIPath, cell_type_key: str, verbose: int) -> None:
         counts = adata.obs[cell_type_key].astype(str).value_counts()
         all_counts.update({str(t): int(n) for t, n in counts.items()})
         types_str = ", ".join(f"{t} ({int(n)})" for t, n in counts.items())
-        click.echo(f"{uri.sample_id}: {adata.n_obs} cells, {len(counts)} types: {types_str}")
+        click.echo(
+            f"{uri.sample_id}: {adata.n_obs} cells, {len(counts)} types: {types_str}"
+        )
 
     n_ok = len(samples) - len(missing)
     if verbose >= 1 and all_counts:

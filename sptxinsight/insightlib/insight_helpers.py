@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
+from typing import Dict
+from typing import Iterable
+from typing import List
+from typing import Tuple
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Iterable, List, Tuple
 from scipy.spatial import Delaunay
-from concurrent.futures import ThreadPoolExecutor
 
 
 def compute_cell_center_points(model_output_df):
@@ -16,15 +21,22 @@ def compute_cell_center_points(model_output_df):
 
     Args:
         model_output_df: DataFrame with 'minx', 'miny', 'width', 'height' columns.
-        
+
     Returns:
         A tuple containing:
         - The DataFrame with 'center_x' and 'center_y' columns added.
     """
     # Calculate cell center points if not already present
-    if 'center_x' not in model_output_df.columns or 'center_y' not in model_output_df.columns:
-        model_output_df['center_x'] = np.rint(model_output_df['minx'] + (model_output_df['width'] / 2)).astype(np.int32)
-        model_output_df['center_y'] = np.rint(model_output_df['miny'] + (model_output_df['height'] / 2)).astype(np.int32)
+    if (
+        "center_x" not in model_output_df.columns
+        or "center_y" not in model_output_df.columns
+    ):
+        model_output_df["center_x"] = np.rint(
+            model_output_df["minx"] + (model_output_df["width"] / 2)
+        ).astype(np.int32)
+        model_output_df["center_y"] = np.rint(
+            model_output_df["miny"] + (model_output_df["height"] / 2)
+        ).astype(np.int32)
 
     return model_output_df
 
@@ -44,11 +56,14 @@ def _delaunay_full(point2d_ary):
 
     # Extract all 3 edge pairs from every simplex in one vectorised step
     simplices = tri.simplices.astype(np.int32)  # shape (M, 3)
-    pairs = np.concatenate([
-        simplices[:, [0, 1]],
-        simplices[:, [0, 2]],
-        simplices[:, [1, 2]],
-    ], axis=0)  # shape (3M, 2)
+    pairs = np.concatenate(
+        [
+            simplices[:, [0, 1]],
+            simplices[:, [0, 2]],
+            simplices[:, [1, 2]],
+        ],
+        axis=0,
+    )  # shape (3M, 2)
 
     # Canonicalise (min, max) so each undirected edge is represented once, then deduplicate
     pairs = np.sort(pairs, axis=1)
@@ -65,11 +80,13 @@ def _delaunay_full(point2d_ary):
 def prune_edges(edges_source, edges_target, edges_length, max_edge_length):
     """Filter edges by a distance threshold and return a DataFrame."""
     mask = edges_length < max_edge_length
-    return pd.DataFrame({
-        "source": edges_source[mask],
-        "target": edges_target[mask],
-        "length": edges_length[mask],
-    })
+    return pd.DataFrame(
+        {
+            "source": edges_source[mask],
+            "target": edges_target[mask],
+            "length": edges_length[mask],
+        }
+    )
 
 
 def delaunay_triangulation(point2d_ary, max_edge_length):
@@ -161,7 +178,9 @@ def create_adjacency_list_fast(
     - dedup_neighbors: np.unique neighbor list per node
     - sort_neighbors: sorted neighbor list per node
     """
-    src, dst = _prep_edges_numpy(edges_df, src_col, dst_col, ensure_undirected, dedup_edges)
+    src, dst = _prep_edges_numpy(
+        edges_df, src_col, dst_col, ensure_undirected, dedup_edges
+    )
 
     if src.size == 0:
         return {}
@@ -179,12 +198,12 @@ def create_adjacency_list_fast(
     adj: Dict[int, List[int]] = {}
     if not (dedup_neighbors or sort_neighbors):
         # fast path: just tolist() without extra work
-        for key, grp in zip(src_keys, dst_groups):
+        for key, grp in zip(src_keys, dst_groups, strict=False):
             adj[int(key)] = grp.tolist()
         return adj
 
     # optional: unique / sort per node
-    for key, grp in zip(src_keys, dst_groups):
+    for key, grp in zip(src_keys, dst_groups, strict=False):
         arr = grp
         if dedup_neighbors:
             arr = np.unique(arr)
@@ -209,7 +228,8 @@ def k_hop_neighbors(nodes_df_or_N, edges_df_or_adj, k):
         - A_csr: 1-hop symmetric sparse adjacency matrix (uint8, no self-loops)
         - Mk_csr: k-hop reachability matrix (uint8, with self-loops)
     """
-    from scipy.sparse import csr_matrix, eye as speye
+    from scipy.sparse import csr_matrix
+    from scipy.sparse import eye as speye
 
     # --- resolve calling convention ---
     if isinstance(nodes_df_or_N, int):
@@ -253,8 +273,8 @@ def k_hop_neighbors(nodes_df_or_N, edges_df_or_adj, k):
             A = csr_matrix((N, N), dtype=np.uint8)
 
     # Build M = A + I (self-loops), then compute M^k
-    I = speye(N, dtype=np.uint8, format="csr")
-    M = (A + I).tocsr()
+    identity = speye(N, dtype=np.uint8, format="csr")
+    M = (A + identity).tocsr()
     M.data[:] = 1
 
     Mk = M
@@ -264,11 +284,12 @@ def k_hop_neighbors(nodes_df_or_N, edges_df_or_adj, k):
 
     indptr = Mk.indptr
     indices = Mk.indices
-    neighbor_lists = [indices[indptr[i]:indptr[i + 1]].tolist() for i in range(N)]
+    neighbor_lists = [indices[indptr[i] : indptr[i + 1]].tolist() for i in range(N)]
     return neighbor_lists, A, Mk
 
 
 # --------------------------- helpers ---------------------------
+
 
 def _reindex_nearest(series: pd.Series, target_levels: Iterable[int]) -> pd.Series:
     """
@@ -277,16 +298,21 @@ def _reindex_nearest(series: pd.Series, target_levels: Iterable[int]) -> pd.Seri
     """
     target_levels = list(target_levels)
     if series.empty:
-        return pd.Series([np.nan] * len(target_levels), index=target_levels, dtype=float)
+        return pd.Series(
+            [np.nan] * len(target_levels), index=target_levels, dtype=float
+        )
     s = series.sort_index()
     return s.reindex(target_levels, method="nearest").astype(float)
 
-def _depth_weights(levels: Iterable[int],
-                   mode: str,
-                   s: float,
-                   range_min: int,
-                   range_max: int,
-                   side: str) -> pd.Series:
+
+def _depth_weights(
+    levels: Iterable[int],
+    mode: str,
+    s: float,
+    range_min: int,
+    range_max: int,
+    side: str,
+) -> pd.Series:
     """
     Compute depth weights for 'inside' or 'outside' layers.
 
@@ -318,6 +344,7 @@ def _depth_weights(levels: Iterable[int],
 
     return pd.Series(w, index=levels, dtype=float)
 
+
 def _center_of_mass(values: pd.Series, coords: pd.Series) -> float:
     """
     Weighted center-of-mass along 1D coordinates.
@@ -333,11 +360,13 @@ def _center_of_mass(values: pd.Series, coords: pd.Series) -> float:
     v, x = v[m], x[m]
     return float(np.sum(v * x) / np.sum(v))
 
+
 def _safe_mean(series: pd.Series) -> float:
     """Mean with NaN tolerance -> float in [0,1] or 0.0 when empty."""
     if series is None or len(series) == 0:
         return 0.0
     return float(np.nanmean(series.values))
+
 
 def _weighted_mean(numer: pd.Series, denom: pd.Series) -> float:
     """
@@ -371,7 +400,7 @@ def _enrichment_for_cell(args) -> float:
 
     # 将邻居 ID 映射到布林值；不在 index 的 ID 视为 False
     neigh_target = target_s.reindex(neigh_ids).fillna(False)
-    neigh_base   = base_s.reindex(neigh_ids).fillna(False)
+    neigh_base = base_s.reindex(neigh_ids).fillna(False)
 
     t_count = neigh_target.sum()
     b_count = neigh_base.sum()
@@ -404,11 +433,11 @@ def compute_enrichment_index(
 
     if Mk_sparse is not None:
         is_target = nodes_df[target_col].to_numpy(dtype=np.float32)
-        is_base   = nodes_df[base_col].to_numpy(dtype=np.float32)
-        ones      = np.ones(len(nodes_df), dtype=np.float32)
-        t_counts  = np.asarray(Mk_sparse @ is_target).ravel()
-        b_counts  = np.asarray(Mk_sparse @ is_base).ravel()
-        n_counts  = np.maximum(np.asarray(Mk_sparse @ ones).ravel(), 1.0)
+        is_base = nodes_df[base_col].to_numpy(dtype=np.float32)
+        ones = np.ones(len(nodes_df), dtype=np.float32)
+        t_counts = np.asarray(Mk_sparse @ is_target).ravel()
+        b_counts = np.asarray(Mk_sparse @ is_base).ravel()
+        n_counts = np.maximum(np.asarray(Mk_sparse @ ones).ravel(), 1.0)
         T = t_counts / n_counts
         B = b_counts / n_counts
         nodes_df["enrichment_index"] = T * T / (T + B + eps)
@@ -418,15 +447,17 @@ def compute_enrichment_index(
     if len(k_neighbors_results) != len(nodes_df):
         raise ValueError("k_neighbors_results length must match len(nodes_df)")
     target_s = nodes_df[target_col].astype(bool)
-    base_s   = nodes_df[base_col].astype(bool)
+    base_s = nodes_df[base_col].astype(bool)
     out = np.empty(len(nodes_df), dtype=float)
-    tasks = [(i, neigh_ids, target_s, base_s, eps) for i, neigh_ids in enumerate(k_neighbors_results)]
+    tasks = [
+        (i, neigh_ids, target_s, base_s, eps)
+        for i, neigh_ids in enumerate(k_neighbors_results)
+    ]
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         for i, value in ex.map(_enrichment_for_cell, tasks):
             out[i] = value
     nodes_df["enrichment_index"] = out
     return nodes_df
-
 
 
 # # --------------------------- main ---------------------------
@@ -482,11 +513,7 @@ def compute_enrichment_index(
 #     return nodes_df
 
 
-
-
-def _check_enrichment_for_cell(
-    args
-):
+def _check_enrichment_for_cell(args):
     """
     Helper for parallel execution.
 
@@ -539,16 +566,19 @@ def identify_region_by_cell_function_enrichment(
         model_output_df with boolean column 'is_base_region'
     """
     if Mk_sparse is not None:
-        is_base  = model_output_df["is_base_type"].to_numpy(dtype=np.float32)
-        ones     = np.ones(len(model_output_df), dtype=np.float32)
+        is_base = model_output_df["is_base_type"].to_numpy(dtype=np.float32)
+        ones = np.ones(len(model_output_df), dtype=np.float32)
         b_counts = np.asarray(Mk_sparse @ is_base).ravel()
         n_counts = np.asarray(Mk_sparse @ ones).ravel()
-        safe_n   = np.maximum(n_counts, 1.0)
+        safe_n = np.maximum(n_counts, 1.0)
         model_output_df["is_base_region"] = (n_counts >= N) & (b_counts / safe_n >= R)
         return model_output_df
 
     # --- fallback: ThreadPoolExecutor path ---
-    tasks = [(i, neighbors, model_output_df, N, R) for i, neighbors in enumerate(k_hop_neighbors_list)]
+    tasks = [
+        (i, neighbors, model_output_df, N, R)
+        for i, neighbors in enumerate(k_hop_neighbors_list)
+    ]
     enriched_cells = []
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         for result in ex.map(_check_enrichment_for_cell, tasks):
@@ -556,7 +586,6 @@ def identify_region_by_cell_function_enrichment(
                 enriched_cells.append(result)
     model_output_df["is_base_region"] = model_output_df.index.isin(enriched_cells)
     return model_output_df
-
 
 
 # def identify_region_by_cell_function_enrichment(k_hop_neighbors_list, model_output_df, N, R):
@@ -592,7 +621,6 @@ def identify_region_by_cell_function_enrichment(
 #     model_output_df['is_base_region'] = model_output_df.index.isin(enriched_cells)
 #
 #     return model_output_df
-
 
 
 def _is_border_for_index(args) -> tuple:
@@ -645,19 +673,24 @@ def identify_border_cells(
         raise KeyError("model_output_df must contain column 'is_base_region'")
 
     if A_sparse is not None:
-        is_region     = model_output_df["is_base_region"].to_numpy(dtype=np.float32)
+        is_region = model_output_df["is_base_region"].to_numpy(dtype=np.float32)
         is_non_region = 1.0 - is_region
         # For each cell: number of non-base-region neighbors
         non_region_nbr_count = np.asarray(A_sparse @ is_non_region).ravel()
-        model_output_df["is_base_border"] = is_region.astype(bool) & (non_region_nbr_count > 0)
+        model_output_df["is_base_border"] = is_region.astype(bool) & (
+            non_region_nbr_count > 0
+        )
         return model_output_df
 
     # --- fallback: ThreadPoolExecutor path ---
-    df_index_set   = set(model_output_df.index)
+    df_index_set = set(model_output_df.index)
     is_base_region = model_output_df["is_base_region"].astype(bool)
     base_region_indices = is_base_region[is_base_region].index
     border_series = pd.Series(False, index=model_output_df.index)
-    tasks = [(idx, adjacency_list, df_index_set, is_base_region) for idx in base_region_indices]
+    tasks = [
+        (idx, adjacency_list, df_index_set, is_base_region)
+        for idx in base_region_indices
+    ]
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         for idx, is_border in ex.map(_is_border_for_index, tasks):
             if is_border:
@@ -711,25 +744,32 @@ def calculate_distance_to_border(model_output_df, adjacency_list, A_sparse=None)
     border_mask = model_output_df["is_base_border"].to_numpy(dtype=bool)
 
     if A_sparse is not None:
-        from scipy.sparse import csr_matrix, vstack, hstack
+        from scipy.sparse import csr_matrix
+        from scipy.sparse import hstack
+        from scipy.sparse import vstack
         from scipy.sparse.csgraph import shortest_path
 
         if border_mask.any():
             border_idx = np.where(border_mask)[0].astype(np.int32)
-            n_border   = len(border_idx)
+            n_border = len(border_idx)
             # Add a virtual source node (index N) connected to all border cells
             vsrc_rows = np.zeros(n_border, dtype=np.int32)
-            data      = np.ones(n_border, dtype=np.uint8)
-            top_row  = csr_matrix((data, (vsrc_rows, border_idx)), shape=(1, N), dtype=np.uint8)
+            data = np.ones(n_border, dtype=np.uint8)
+            top_row = csr_matrix(
+                (data, (vsrc_rows, border_idx)), shape=(1, N), dtype=np.uint8
+            )
             left_col = top_row.T.tocsr()
-            corner   = csr_matrix((1, 1), dtype=np.uint8)
-            aug = vstack([hstack([A_sparse, left_col]), hstack([top_row, corner])]).tocsr()
+            corner = csr_matrix((1, 1), dtype=np.uint8)
+            aug = vstack(
+                [hstack([A_sparse, left_col]), hstack([top_row, corner])]
+            ).tocsr()
             # BFS shortest path from the virtual source (index N); unweighted graph
-            dist_row = shortest_path(aug, method="D", directed=False,
-                                     indices=N, unweighted=True)
+            dist_row = shortest_path(
+                aug, method="D", directed=False, indices=N, unweighted=True
+            )
             edge_dist = dist_row[:N]
             # Subtract the virtual hop; unreachable nodes stay inf
-            inf_mask  = np.isinf(edge_dist)
+            inf_mask = np.isinf(edge_dist)
             edge_dist = np.where(inf_mask, np.inf, np.maximum(edge_dist - 1.0, 0.0))
             edge_dist[border_mask] = 0.0
         else:
@@ -746,17 +786,23 @@ def calculate_distance_to_border(model_output_df, adjacency_list, A_sparse=None)
             cur = queue.popleft()
             if cur in adjacency_list:
                 for nb in adjacency_list[cur]:
-                    if nb in model_output_df.index and edge_distance_to_border[nb] == float("inf"):
+                    if nb in model_output_df.index and edge_distance_to_border[
+                        nb
+                    ] == float("inf"):
                         edge_distance_to_border[nb] = edge_distance_to_border[cur] + 1
                         queue.append(nb)
-        edge_dist = np.array([edge_distance_to_border[i] for i in model_output_df.index], dtype=float)
+        edge_dist = np.array(
+            [edge_distance_to_border[i] for i in model_output_df.index], dtype=float
+        )
 
     model_output_df["distance_to_border"] = edge_dist
     model_output_df["signed_distance_to_border"] = edge_dist.copy()
-    model_output_df.loc[model_output_df["is_base_region"], "signed_distance_to_border"] *= -1
-    model_output_df["signed_distance_to_border"] = (
-        model_output_df["signed_distance_to_border"].replace([np.inf, -np.inf], np.nan)
-    )
+    model_output_df.loc[
+        model_output_df["is_base_region"], "signed_distance_to_border"
+    ] *= -1
+    model_output_df["signed_distance_to_border"] = model_output_df[
+        "signed_distance_to_border"
+    ].replace([np.inf, -np.inf], np.nan)
     return model_output_df
 
 
@@ -775,7 +821,7 @@ def compute_hplot(df_with_distances, filtered_edges_df):
     # Group by signed_distance_to_border and calculate the ratio of targets
     # Handle potential empty groups or no targets at a distance
     # Exclude NaN distances from grouping
-    
+
     # base_type_prop_by_distance = df_with_distances.dropna(subset=['signed_distance_to_border']).groupby('signed_distance_to_border')[f'is_base_type'].apply(lambda x: x.sum() / len(x) if len(x) > 0 else 0)
     # target_type_prop_by_distance = df_with_distances.dropna(subset=['signed_distance_to_border']).groupby('signed_distance_to_border')[f'is_target_type'].apply(lambda x: x.sum() / len(x) if len(x) > 0 else 0)
 
@@ -783,59 +829,71 @@ def compute_hplot(df_with_distances, filtered_edges_df):
     # base_type_count_by_distance = df_with_distances.dropna(subset=['signed_distance_to_border']).groupby('signed_distance_to_border')[f'is_base_type'].apply(lambda x: x.sum() if len(x) > 0 else 0)
     # target_type_count_by_distance = df_with_distances.dropna(subset=['signed_distance_to_border']).groupby('signed_distance_to_border')[f'is_target_type'].apply(lambda x: x.sum() if len(x) > 0 else 0)
 
-    valid_layers = df_with_distances.dropna(subset=['signed_distance_to_border'])
-    grouped_layers = valid_layers.groupby('signed_distance_to_border')
+    valid_layers = df_with_distances.dropna(subset=["signed_distance_to_border"])
+    grouped_layers = valid_layers.groupby("signed_distance_to_border")
     # ``target_value`` carries the per-cell target quantity: a 0/1 cell-type
     # membership (cell-type mode) or a continuous gene-expression value (gene
     # mode). Averaging it per layer yields ``target_type_prop`` -- a proportion
     # for cell types, a mean expression for genes. Fall back to the boolean
     # ``is_target_type`` when ``target_value`` is absent (legacy contract).
-    has_target_value = 'target_value' in valid_layers.columns
+    has_target_value = "target_value" in valid_layers.columns
     if has_target_value:
         layer_counts = grouped_layers.agg(
-            all_count=('is_base_type', 'size'),
-            base_count=('is_base_type', 'sum'),
-            target_count=('is_target_type', 'sum'),
-            target_value_sum=('target_value', 'sum'),
+            all_count=("is_base_type", "size"),
+            base_count=("is_base_type", "sum"),
+            target_count=("is_target_type", "sum"),
+            target_value_sum=("target_value", "sum"),
         )
-        target_numer = layer_counts['target_value_sum']
+        target_numer = layer_counts["target_value_sum"]
     else:
         layer_counts = grouped_layers.agg(
-            all_count=('is_base_type', 'size'),
-            base_count=('is_base_type', 'sum'),
-            target_count=('is_target_type', 'sum'),
+            all_count=("is_base_type", "size"),
+            base_count=("is_base_type", "sum"),
+            target_count=("is_target_type", "sum"),
         )
-        target_numer = layer_counts['target_count']
+        target_numer = layer_counts["target_count"]
 
-    all_type_count_by_distance = layer_counts['all_count']
-    base_type_count_by_distance = layer_counts['base_count']
-    target_type_count_by_distance = layer_counts['target_count']
+    all_type_count_by_distance = layer_counts["all_count"]
+    base_type_count_by_distance = layer_counts["base_count"]
+    target_type_count_by_distance = layer_counts["target_count"]
 
-    denom = layer_counts['all_count'].replace(0, np.nan)
-    base_type_prop_by_distance = (layer_counts['base_count'] / denom).fillna(0.0)
+    denom = layer_counts["all_count"].replace(0, np.nan)
+    base_type_prop_by_distance = (layer_counts["base_count"] / denom).fillna(0.0)
     target_type_prop_by_distance = (target_numer / denom).fillna(0.0)
 
     # Step 1: Calculate average edge length between adjacent layers
     average_edge_length_between_layers = {}
-    unique_distances = sorted(df_with_distances['signed_distance_to_border'].dropna().unique())
+    unique_distances = sorted(
+        df_with_distances["signed_distance_to_border"].dropna().unique()
+    )
 
     for i in range(len(unique_distances) - 1):
         dist1 = unique_distances[i]
-        dist2 = unique_distances[i+1]
+        dist2 = unique_distances[i + 1]
 
         # Identify cells in the two adjacent layers
-        cells_in_dist1 = df_with_distances[df_with_distances['signed_distance_to_border'] == dist1].index
-        cells_in_dist2 = df_with_distances[df_with_distances['signed_distance_to_border'] == dist2].index
+        cells_in_dist1 = df_with_distances[
+            df_with_distances["signed_distance_to_border"] == dist1
+        ].index
+        cells_in_dist2 = df_with_distances[
+            df_with_distances["signed_distance_to_border"] == dist2
+        ].index
 
         # Find edges connecting cells in dist1 to cells in dist2
         connecting_edges = filtered_edges_df[
-            ((filtered_edges_df['source'].isin(cells_in_dist1)) & (filtered_edges_df['target'].isin(cells_in_dist2))) |
-            ((filtered_edges_df['source'].isin(cells_in_dist2)) & (filtered_edges_df['target'].isin(cells_in_dist1)))
+            (
+                (filtered_edges_df["source"].isin(cells_in_dist1))
+                & (filtered_edges_df["target"].isin(cells_in_dist2))
+            )
+            | (
+                (filtered_edges_df["source"].isin(cells_in_dist2))
+                & (filtered_edges_df["target"].isin(cells_in_dist1))
+            )
         ]
 
         # Calculate the average length of these connecting edges
         if not connecting_edges.empty:
-            average_length = connecting_edges['length'].mean()
+            average_length = connecting_edges["length"].mean()
             # Store the average length associated with the lower distance value of the pair
             # This makes the cumulative sum calculation more straightforward
             average_edge_length_between_layers[dist1] = average_length
@@ -851,54 +909,68 @@ def compute_hplot(df_with_distances, filtered_edges_df):
     avg_lengths_series = avg_lengths_series.sort_index()
 
     # A clearer way for cumulative sum with sign:
-    cumulative_avg_lengths_dict = {0.0: 0.0} # Start at the border
+    cumulative_avg_lengths_dict = {0.0: 0.0}  # Start at the border
 
     # Cumulative outwards (positive distances)
     current_dist = 0.0
     for signed_dist in sorted(unique_distances):
         if signed_dist > 0:
             prev_dist = unique_distances[unique_distances.index(signed_dist) - 1]
-            if prev_dist in average_edge_length_between_layers: # avg length between prev_dist and signed_dist
+            if (
+                prev_dist in average_edge_length_between_layers
+            ):  # avg length between prev_dist and signed_dist
                 current_dist += average_edge_length_between_layers[prev_dist]
                 cumulative_avg_lengths_dict[signed_dist] = current_dist
-            elif signed_dist-1 in average_edge_length_between_layers: # Check if avg length from n-1 to n is available
-                current_dist += average_edge_length_between_layers[signed_dist-1]
+            elif (
+                signed_dist - 1 in average_edge_length_between_layers
+            ):  # Check if avg length from n-1 to n is available
+                current_dist += average_edge_length_between_layers[signed_dist - 1]
                 cumulative_avg_lengths_dict[signed_dist] = current_dist
             else:
-                cumulative_avg_lengths_dict[signed_dist] = np.nan # If no edge to prev layer, cumulative is NaN
+                cumulative_avg_lengths_dict[
+                    signed_dist
+                ] = np.nan  # If no edge to prev layer, cumulative is NaN
 
     # Cumulative inwards (negative distances)
     current_dist = 0.0
     for signed_dist in sorted(unique_distances, reverse=True):
         if signed_dist < 0:
             # next_dist = unique_distances[unique_distances.index(signed_dist) + 1]
-            if signed_dist in average_edge_length_between_layers: # avg length between signed_dist and next_dist
-                current_dist -= average_edge_length_between_layers[signed_dist] # Subtract as we move inwards
+            if (
+                signed_dist in average_edge_length_between_layers
+            ):  # avg length between signed_dist and next_dist
+                current_dist -= average_edge_length_between_layers[
+                    signed_dist
+                ]  # Subtract as we move inwards
                 cumulative_avg_lengths_dict[signed_dist] = current_dist
             else:
-                cumulative_avg_lengths_dict[signed_dist] = np.nan # If no edge to next layer, cumulative is NaN
+                cumulative_avg_lengths_dict[
+                    signed_dist
+                ] = np.nan  # If no edge to next layer, cumulative is NaN
 
     # Convert the dictionary to a Series and align with signed distances in plot_df
     cumulative_avg_lengths_series = pd.Series(cumulative_avg_lengths_dict)
 
     # Step 4 & 5: Group target ratio by signed distance and align with cumulative average edge lengths
-    plot_df = pd.DataFrame({
-        'layer': target_type_prop_by_distance.index,
-        'base_type_prop': base_type_prop_by_distance.values,
-        'target_type_prop': target_type_prop_by_distance.values,
-        'base_type_count': base_type_count_by_distance.values,
-        'target_type_count': target_type_count_by_distance.values,
-        'all_type_count': all_type_count_by_distance.values
-        })
+    plot_df = pd.DataFrame(
+        {
+            "layer": target_type_prop_by_distance.index,
+            "base_type_prop": base_type_prop_by_distance.values,
+            "target_type_prop": target_type_prop_by_distance.values,
+            "base_type_count": base_type_count_by_distance.values,
+            "target_type_count": target_type_count_by_distance.values,
+            "all_type_count": all_type_count_by_distance.values,
+        }
+    )
 
     # Map the cumulative average edge lengths to the signed_distance in plot_df
-    plot_df['distance'] = plot_df['layer'].map(cumulative_avg_lengths_series)
+    plot_df["distance"] = plot_df["layer"].map(cumulative_avg_lengths_series)
 
     # Drop rows where we couldn't calculate the cumulative average edge length
-    plot_df = plot_df.dropna(subset=['distance'])
+    plot_df = plot_df.dropna(subset=["distance"])
 
     # Sort by the new x-axis values for a clear line plot
-    plot_df = plot_df.sort_values('layer')
+    plot_df = plot_df.sort_values("layer")
 
     return plot_df
 
@@ -908,8 +980,8 @@ def compute_hmetrics(
     range_min: int | None,
     range_max: int | None,
     hplot_samples_with_valid_range_only: bool = False,
-    depth_weight_mode: str = "linear",   # "linear" (default) or "sigmoid"
-    s: float = 6.0,                      # slope for sigmoid when depth_weight_mode="sigmoid"
+    depth_weight_mode: str = "linear",  # "linear" (default) or "sigmoid"
+    s: float = 6.0,  # slope for sigmoid when depth_weight_mode="sigmoid"
 ) -> Dict[str, Any]:
     """
     Compute spatial interaction metrics between a target cell class (e.g., immune)
@@ -948,10 +1020,9 @@ def compute_hmetrics(
     df_work = hplot_df
     if hplot_samples_with_valid_range_only and ("id" in hplot_df.columns):
         layer_clean = pd.to_numeric(hplot_df["layer"], errors="coerce")
-        img_layer = (
-            pd.concat([hplot_df["id"], layer_clean.rename("layer")], axis=1)
-            .dropna(subset=["id", "layer"])
-        )
+        img_layer = pd.concat(
+            [hplot_df["id"], layer_clean.rename("layer")], axis=1
+        ).dropna(subset=["id", "layer"])
         img_layer["layer"] = img_layer["layer"].astype(int)
         if not img_layer.empty:
             per_img = img_layer.groupby("id")["layer"].agg(["min", "max"]).astype(int)
@@ -967,12 +1038,21 @@ def compute_hmetrics(
             raise KeyError(f"missing required column '{col}'")
 
     layer = pd.to_numeric(df_work["layer"], errors="coerce").astype("Int64")
-    target_prop = pd.to_numeric(df_work["target_type_prop"], errors="coerce").clip(0.0, 1.0)
-    tumor_prop  = pd.to_numeric(df_work["base_type_prop"],   errors="coerce").clip(0.0, 1.0)
-    distance    = pd.to_numeric(df_work["distance"],         errors="coerce")
+    target_prop = pd.to_numeric(df_work["target_type_prop"], errors="coerce").clip(
+        0.0, 1.0
+    )
+    tumor_prop = pd.to_numeric(df_work["base_type_prop"], errors="coerce").clip(
+        0.0, 1.0
+    )
+    distance = pd.to_numeric(df_work["distance"], errors="coerce")
 
     m = layer.notna() & target_prop.notna() & tumor_prop.notna() & distance.notna()
-    layer, target_prop, tumor_prop, distance = layer[m].astype(int), target_prop[m], tumor_prop[m], distance[m]
+    layer, target_prop, tumor_prop, distance = (
+        layer[m].astype(int),
+        target_prop[m],
+        tumor_prop[m],
+        distance[m],
+    )
 
     # Early exit if nothing remains
     if len(layer) == 0 or range_max is None or range_min is None:
@@ -1002,34 +1082,46 @@ def compute_hmetrics(
 
     # -------- per-layer aggregates --------
     target_by_layer = target_prop.groupby(layer).mean()  # immune abundance per layer
-    tumor_by_layer  = tumor_prop.groupby(layer).mean()   # tumor abundance per layer
-    dist_by_layer   = distance.groupby(layer).mean()     # signed distance per layer
+    tumor_by_layer = tumor_prop.groupby(layer).mean()  # tumor abundance per layer
+    dist_by_layer = distance.groupby(layer).mean()  # signed distance per layer
 
     # desired indices on both sides
-    inside_levels  = list(range(0, range_min - 1, -1))  #  0, -1, -2, ..., range_min
-    outside_levels = list(range(1, range_max + 1))      #  1,  2,  3, ..., range_max
+    inside_levels = list(range(0, range_min - 1, -1))  #  0, -1, -2, ..., range_min
+    outside_levels = list(range(1, range_max + 1))  #  1,  2,  3, ..., range_max
 
     # align series to the indices we want (nearest)
-    target_intra = _reindex_nearest(target_by_layer[target_by_layer.index <= 0], inside_levels).clip(0.0, 1.0)
-    target_peri= _reindex_nearest(target_by_layer[target_by_layer.index >= 1], outside_levels).clip(0.0, 1.0)
-    tumor_intra  = _reindex_nearest(tumor_by_layer[tumor_by_layer.index   <= 0], inside_levels).clip(0.0, 1.0)
-    tumor_peri = _reindex_nearest(tumor_by_layer[tumor_by_layer.index   >= 1], outside_levels).clip(0.0, 1.0)
+    target_intra = _reindex_nearest(
+        target_by_layer[target_by_layer.index <= 0], inside_levels
+    ).clip(0.0, 1.0)
+    target_peri = _reindex_nearest(
+        target_by_layer[target_by_layer.index >= 1], outside_levels
+    ).clip(0.0, 1.0)
+    tumor_intra = _reindex_nearest(
+        tumor_by_layer[tumor_by_layer.index <= 0], inside_levels
+    ).clip(0.0, 1.0)
+    tumor_peri = _reindex_nearest(
+        tumor_by_layer[tumor_by_layer.index >= 1], outside_levels
+    ).clip(0.0, 1.0)
 
-    dist_intra   = _reindex_nearest(dist_by_layer[dist_by_layer.index     <= 0], inside_levels)
-    dist_peri  = _reindex_nearest(dist_by_layer[dist_by_layer.index     >= 1], outside_levels)
+    dist_intra = _reindex_nearest(
+        dist_by_layer[dist_by_layer.index <= 0], inside_levels
+    )
+    dist_peri = _reindex_nearest(
+        dist_by_layer[dist_by_layer.index >= 1], outside_levels
+    )
 
     # shorthand: immune abundance per layer (weights)
     p_intra, p_peri = target_intra, target_peri
 
     # -------- base spatial metrics --------
     # abundance = mean immune fraction per side
-    abundance_intra  = _safe_mean(p_intra)
+    abundance_intra = _safe_mean(p_intra)
     abundance_peri = _safe_mean(p_peri)
 
     # outside proximity: immune-weighted CoM outward normalized by max distance
     total_p_out = float(np.nansum(p_peri.values))
     if total_p_out > 0 and len(dist_peri) > 0:
-        com_out = _center_of_mass(p_peri, dist_peri)           # >0 outward
+        com_out = _center_of_mass(p_peri, dist_peri)  # >0 outward
         D_out_max = float(np.nanmax(dist_peri.values)) or 0.0
         if D_out_max > 0:
             proximity_peri = float(np.clip(1.0 - (com_out / D_out_max), 0.0, 1.0))
@@ -1038,7 +1130,9 @@ def compute_hmetrics(
         convergence_distance_out = float(com_out)
     else:
         proximity_peri = 0.0
-        convergence_distance_out = float(np.nanmax(dist_peri.values)) if len(dist_peri) else 0.0
+        convergence_distance_out = (
+            float(np.nanmax(dist_peri.values)) if len(dist_peri) else 0.0
+        )
 
     # inside penetration: immune-weighted mean depth normalized by max |range_min|
     # also save convergence_distance_intra as negative magnitude inward
@@ -1046,66 +1140,81 @@ def compute_hmetrics(
     p_intra_neg = p_intra[p_intra.index < 0]
     depth_intra_neg = depth_intra_mag.reindex(p_intra_neg.index)
     if len(p_intra_neg) and float(np.nansum(p_intra_neg.values)) > 0.0:
-        com_in_mag = _center_of_mass(p_intra_neg, depth_intra_neg)  # positive magnitude inward
-        convergence_distance_intra = -float(com_in_mag)              # report negative inward
+        com_in_mag = _center_of_mass(
+            p_intra_neg, depth_intra_neg
+        )  # positive magnitude inward
+        convergence_distance_intra = -float(com_in_mag)  # report negative inward
     else:
         com_in_mag = 0.0
         convergence_distance_intra = 0.0
 
     max_depth = max(abs(int(range_min)), 1)
     if len(p_intra) and float(np.nansum(p_intra.values)) > 0.0:
-        all_depths = pd.Series([abs(l) for l in inside_levels], index=inside_levels, dtype=float)
-        mean_depth = float(np.nansum((all_depths * p_intra).values) / np.nansum(p_intra.values))
+        all_depths = pd.Series(
+            [abs(lvl) for lvl in inside_levels], index=inside_levels, dtype=float
+        )
+        mean_depth = float(
+            np.nansum((all_depths * p_intra).values) / np.nansum(p_intra.values)
+        )
         penetration_intra = float(np.clip(mean_depth / max_depth, 0.0, 1.0))
     else:
         penetration_intra = 0.0
 
     # -------- layerwise enrichment (immune- & depth-weighted mean of R_i) --------
     eps = 1e-6
-    R_intra  = (target_intra  / (target_intra  + tumor_intra  + eps)).clip(0.0, 1.0)
+    R_intra = (target_intra / (target_intra + tumor_intra + eps)).clip(0.0, 1.0)
     R_peri = (target_peri / (target_peri + tumor_peri + eps)).clip(0.0, 1.0)
-    valid_intra  = (target_intra  + tumor_intra)  > 0
+    valid_intra = (target_intra + tumor_intra) > 0
     valid_peri = (target_peri + tumor_peri) > 0
 
-    w_depth_intra  = _depth_weights(inside_levels,  depth_weight_mode, s, range_min, range_max, side="inside")
-    w_depth_peri = _depth_weights(outside_levels, depth_weight_mode, s, range_min, range_max, side="outside")
+    w_depth_intra = _depth_weights(
+        inside_levels, depth_weight_mode, s, range_min, range_max, side="inside"
+    )
+    w_depth_peri = _depth_weights(
+        outside_levels, depth_weight_mode, s, range_min, range_max, side="outside"
+    )
 
     # final weights = immune abundance * depth weight
-    w_intra  = (p_intra  * w_depth_intra ).where(valid_intra,  np.nan)
+    w_intra = (p_intra * w_depth_intra).where(valid_intra, np.nan)
     w_peri = (p_peri * w_depth_peri).where(valid_peri, np.nan)
 
-    num_intra  = (R_intra  * w_intra ).where(valid_intra,  np.nan)
+    num_intra = (R_intra * w_intra).where(valid_intra, np.nan)
     num_peri = (R_peri * w_peri).where(valid_peri, np.nan)
 
-    layerwise_enrichment_intra  = _weighted_mean(num_intra,  w_intra)
+    layerwise_enrichment_intra = _weighted_mean(num_intra, w_intra)
     layerwise_enrichment_peri = _weighted_mean(num_peri, w_peri)
 
     # -------- global enrichment (side-wise mean T and B) --------
-    target_intra_mean  = _safe_mean(target_intra)
-    tumor_intra_mean   = _safe_mean(tumor_intra)
+    target_intra_mean = _safe_mean(target_intra)
+    tumor_intra_mean = _safe_mean(tumor_intra)
     target_peri_mean = _safe_mean(target_peri)
-    tumor_peri_mean  = _safe_mean(tumor_peri)
+    tumor_peri_mean = _safe_mean(tumor_peri)
 
-    global_enrichment_intra  = float(target_intra_mean  / (target_intra_mean  + tumor_intra_mean  + eps))
-    global_enrichment_peri = float(target_peri_mean / (target_peri_mean + tumor_peri_mean + eps))
+    global_enrichment_intra = float(
+        target_intra_mean / (target_intra_mean + tumor_intra_mean + eps)
+    )
+    global_enrichment_peri = float(
+        target_peri_mean / (target_peri_mean + tumor_peri_mean + eps)
+    )
 
     # -------- combine into outputs --------
     return {
         "valid": valid,
         "intra": {
-            "convergence_distance":  convergence_distance_intra,  # negative inward
-            "abundance_score":       abundance_intra,
-            "penetration_score":     penetration_intra,
-            "layerwise_enrichment_index":   layerwise_enrichment_intra,
-            "global_enrichment_index":      global_enrichment_intra,
-            "weighted_global_enrichment_index": penetration_intra * global_enrichment_intra,
+            "convergence_distance": convergence_distance_intra,  # negative inward
+            "abundance_score": abundance_intra,
+            "penetration_score": penetration_intra,
+            "layerwise_enrichment_index": layerwise_enrichment_intra,
+            "global_enrichment_index": global_enrichment_intra,
+            "weighted_global_enrichment_index": penetration_intra
+            * global_enrichment_intra,
         },
         "peri": {
-            "convergence_distance":  convergence_distance_out,
-            "abundance_score":       abundance_peri,
-            "proximity_score":       proximity_peri,
-            "layerwise_enrichment_index":   layerwise_enrichment_peri,
-            "global_enrichment_index":      global_enrichment_peri,
+            "convergence_distance": convergence_distance_out,
+            "abundance_score": abundance_peri,
+            "proximity_score": proximity_peri,
+            "layerwise_enrichment_index": layerwise_enrichment_peri,
+            "global_enrichment_index": global_enrichment_peri,
             "weighted_global_enrichment_index": proximity_peri * global_enrichment_peri,
-        }
+        },
     }

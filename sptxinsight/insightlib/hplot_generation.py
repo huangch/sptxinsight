@@ -2,34 +2,36 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Sequence, List, Mapping
+from typing import List
+from typing import Mapping
+from typing import Sequence
 
 import numpy as np
-
-_logger = logging.getLogger(__name__)
 import pandas as pd
 from tqdm import tqdm
 
 from .. import errors
-from ..cancel import cancellable_as_completed, critical_section
-from ..io._wsi_stub import _validate_wsi_directory, get_avg_mpp
-from ..uri_path import URIPath
 from ..adapt import _sanitize_type
-
-from .insight_helpers import (compute_cell_center_points,
-                              delaunay_triangulation,
-                              k_hop_neighbors,
-                              identify_region_by_cell_function_enrichment,
-                              calculate_distance_to_border,
-                              identify_border_cells,
-                              compute_hplot,
-                              # compute_hmetrics,  # DISABLED: hmetrics generation turned off
-                              )
+from ..cancel import cancellable_as_completed
+from ..cancel import critical_section
+from ..io._wsi_stub import _validate_wsi_directory
+from ..io._wsi_stub import get_avg_mpp
+from ..uri_path import URIPath
 from .graph_cache import get_or_build_delaunay
+from .insight_helpers import calculate_distance_to_border
+from .insight_helpers import compute_cell_center_points
+from .insight_helpers import compute_hplot
+
+# compute_hmetrics,  # DISABLED: hmetrics generation turned off
+from .insight_helpers import delaunay_triangulation
+from .insight_helpers import identify_border_cells
+from .insight_helpers import identify_region_by_cell_function_enrichment
+from .insight_helpers import k_hop_neighbors
+
+_logger = logging.getLogger(__name__)
 
 _WORKER_STEPS = [
     "load CSV",
@@ -60,7 +62,6 @@ _CME_FAMILY_SUBDIR = {
 # `sptxinsight cci`), alongside the ``prob_*`` columns copied through for
 # celltype-based base anchoring.
 _CCI_SUBDIR = "cci-outputs-csv/cells"
-
 
 
 def _worker(
@@ -143,9 +144,7 @@ def _worker(
         inner.close()
         return slide_id, None, None
 
-    predicted_labels = (
-        nodes_df[prob_columns].idxmax(axis=1) if prob_columns else None
-    )
+    predicted_labels = nodes_df[prob_columns].idxmax(axis=1) if prob_columns else None
 
     # Case-insensitive lookups: lowered column name -> actual column name.
     _prob_lower_to_actual = {c.lower(): c for c in prob_columns}
@@ -204,7 +203,9 @@ def _worker(
     # Aggregate membership columns written by `sptxinsight agg`:
     # object_<name>_prob_<name> (1.0 = member, 0.0 = not).
     _obj_lower_to_actual = {
-        c.lower(): c for c in nodes_df.columns.to_list() if c.lower().startswith("object_")
+        c.lower(): c
+        for c in nodes_df.columns.to_list()
+        if c.lower().startswith("object_")
     }
 
     def _resolve_aggregates(type_list: Sequence[str]) -> list[str]:
@@ -223,7 +224,9 @@ def _worker(
         if not base_expr_cols:
             _logger.warning(
                 "[%s] None of the base genes %s matched expr_ columns %s. Skipping slide.",
-                slide_id, sorted(base_type_list), sorted(expr_columns),
+                slide_id,
+                sorted(base_type_list),
+                sorted(expr_columns),
             )
             inner.close()
             return slide_id, None, None
@@ -236,7 +239,9 @@ def _worker(
         if not base_cme_cols:
             _logger.warning(
                 "[%s] None of the base CMEs %s matched %s columns. Skipping slide.",
-                slide_id, sorted(base_type_list), base_prefix,
+                slide_id,
+                sorted(base_type_list),
+                base_prefix,
             )
             inner.close()
             return slide_id, None, None
@@ -246,7 +251,8 @@ def _worker(
         if not base_cci_cols:
             _logger.warning(
                 "[%s] None of the base CCI scores %s matched cci_ columns. Skipping slide.",
-                slide_id, sorted(base_type_list),
+                slide_id,
+                sorted(base_type_list),
             )
             inner.close()
             return slide_id, None, None
@@ -259,7 +265,9 @@ def _worker(
             _logger.warning(
                 "[%s] None of the base aggregates %s matched object_<name>_prob_<name> "
                 "columns %s. Run `sptxinsight agg` first. Skipping slide.",
-                slide_id, sorted(base_type_list), sorted(_obj_lower_to_actual.values()),
+                slide_id,
+                sorted(base_type_list),
+                sorted(_obj_lower_to_actual.values()),
             )
             inner.close()
             return slide_id, None, None
@@ -269,7 +277,9 @@ def _worker(
         if not base_targets:
             _logger.warning(
                 "[%s] None of the base types %s matched available columns %s (case-insensitive). Skipping slide.",
-                slide_id, sorted(base_type_list), sorted(prob_columns),
+                slide_id,
+                sorted(base_type_list),
+                sorted(prob_columns),
             )
             inner.close()
             return slide_id, None, None
@@ -281,7 +291,9 @@ def _worker(
         if not target_expr_cols:
             _logger.warning(
                 "[%s] None of the target genes %s matched expr_ columns %s. Skipping slide.",
-                slide_id, sorted(target_type_list), sorted(expr_columns),
+                slide_id,
+                sorted(target_type_list),
+                sorted(expr_columns),
             )
             inner.close()
             return slide_id, None, None
@@ -295,7 +307,9 @@ def _worker(
         if not target_cme_cols:
             _logger.warning(
                 "[%s] None of the target CMEs %s matched %s columns. Skipping slide.",
-                slide_id, sorted(target_type_list), target_prefix,
+                slide_id,
+                sorted(target_type_list),
+                target_prefix,
             )
             inner.close()
             return slide_id, None, None
@@ -309,7 +323,8 @@ def _worker(
         if not target_cci_cols:
             _logger.warning(
                 "[%s] None of the target CCI scores %s matched cci_ columns. Skipping slide.",
-                slide_id, sorted(target_type_list),
+                slide_id,
+                sorted(target_type_list),
             )
             inner.close()
             return slide_id, None, None
@@ -323,7 +338,9 @@ def _worker(
             _logger.warning(
                 "[%s] None of the target aggregates %s matched object_<name>_prob_<name> "
                 "columns %s. Run `sptxinsight agg` first. Skipping slide.",
-                slide_id, sorted(target_type_list), sorted(_obj_lower_to_actual.values()),
+                slide_id,
+                sorted(target_type_list),
+                sorted(_obj_lower_to_actual.values()),
             )
             inner.close()
             return slide_id, None, None
@@ -337,7 +354,9 @@ def _worker(
         if not target_targets:
             _logger.warning(
                 "[%s] None of the target types %s matched available columns %s (case-insensitive). Skipping slide.",
-                slide_id, sorted(target_type_list), sorted(prob_columns),
+                slide_id,
+                sorted(target_type_list),
+                sorted(prob_columns),
             )
             inner.close()
             return slide_id, None, None
@@ -349,7 +368,9 @@ def _worker(
 
     centers = nodes_df[["center_x", "center_y"]].values
     if graph_cache_dir is not None:
-        edges_df = get_or_build_delaunay(graph_cache_dir, slide_id, centers, mpp, max_neighbor_distance_px)
+        edges_df = get_or_build_delaunay(
+            graph_cache_dir, slide_id, centers, mpp, max_neighbor_distance_px
+        )
     else:
         edges_df = delaunay_triangulation(centers, max_neighbor_distance_px)
     _step("triangulate")
@@ -358,7 +379,9 @@ def _worker(
         inner.close()
         return slide_id, None, None
 
-    k_neighbors_results, A_sparse, Mk_sparse = k_hop_neighbors(len(nodes_df), edges_df, hplot_k)
+    k_neighbors_results, A_sparse, Mk_sparse = k_hop_neighbors(
+        len(nodes_df), edges_df, hplot_k
+    )
     _step("k-hop nbrs")
 
     nodes_df = identify_region_by_cell_function_enrichment(
@@ -375,7 +398,9 @@ def _worker(
     _drop_cols = ["is_base_region", "is_base_border", "distance_to_border"]
     with critical_section(f"saving hplot outputs for {slide_id}"):
         with cells_csv.open("w", encoding="utf-8", newline="") as fp:
-            nodes_df.drop(columns=[c for c in _drop_cols if c in nodes_df.columns]).to_csv(fp, index=False)
+            nodes_df.drop(
+                columns=[c for c in _drop_cols if c in nodes_df.columns]
+            ).to_csv(fp, index=False)
 
         hplot_df = compute_hplot(nodes_df, edges_df)
         _step("hplot curve")
@@ -457,10 +482,7 @@ def hplot_finalize(output_dir: URIPath, overwrite: bool = False) -> None:
     # hplot_hmetrics_csv = output_dir / "hmetrics-outputs.csv"  # DISABLED: hmetrics
 
     if not overwrite and hplot_hplots_csv.exists():
-        print(
-            "hplot-outputs.csv already exists. "
-            "Use --overwrite to regenerate."
-        )
+        print("hplot-outputs.csv already exists. Use --overwrite to regenerate.")
         return
 
     hplot_outputs_csv_dir = output_dir / "hplot-outputs-csv"
@@ -485,7 +507,16 @@ def hplot_finalize(output_dir: URIPath, overwrite: bool = False) -> None:
         "base_type_count": "base_count",
         "all_type_count": "all_count",
     }
-    _COL_ORDER = ["id", "layer", "target_prop", "target_count", "base_prop", "base_count", "all_count", "distance"]
+    _COL_ORDER = [
+        "id",
+        "layer",
+        "target_prop",
+        "target_count",
+        "base_prop",
+        "base_count",
+        "all_count",
+        "distance",
+    ]
 
     hplot_frames: list[pd.DataFrame] = []
     for csv_file in tqdm(hplot_files, desc="Assembling hplot CSVs", unit="slide"):
@@ -497,9 +528,19 @@ def hplot_finalize(output_dir: URIPath, overwrite: bool = False) -> None:
         if df.empty:
             continue
         df["layer"] = df["layer"].astype(int)
-        src_cols = [c for c in ["layer", "target_type_prop", "target_type_count",
-                                 "base_type_prop", "base_type_count", "all_type_count", "distance"]
-                    if c in df.columns]
+        src_cols = [
+            c
+            for c in [
+                "layer",
+                "target_type_prop",
+                "target_type_count",
+                "base_type_prop",
+                "base_type_count",
+                "all_type_count",
+                "distance",
+            ]
+            if c in df.columns
+        ]
         df = df[src_cols].copy()
         df.rename(columns=_COL_RENAME, inplace=True)
 
@@ -509,16 +550,18 @@ def hplot_finalize(output_dir: URIPath, overwrite: bool = False) -> None:
         rows = []
         for layer in range(mn, mx + 1):
             entry = layer_lookup.get(layer, {})
-            rows.append({
-                "id": slide_id,
-                "layer": layer,
-                "target_prop": entry.get("target_prop", np.nan),
-                "target_count": entry.get("target_count", np.nan),
-                "base_prop": entry.get("base_prop", np.nan),
-                "base_count": entry.get("base_count", np.nan),
-                "all_count": entry.get("all_count", np.nan),
-                "distance": entry.get("distance", np.nan),
-            })
+            rows.append(
+                {
+                    "id": slide_id,
+                    "layer": layer,
+                    "target_prop": entry.get("target_prop", np.nan),
+                    "target_count": entry.get("target_count", np.nan),
+                    "base_prop": entry.get("base_prop", np.nan),
+                    "base_count": entry.get("base_count", np.nan),
+                    "all_count": entry.get("all_count", np.nan),
+                    "distance": entry.get("distance", np.nan),
+                }
+            )
         hplot_frames.append(pd.DataFrame(rows, columns=_COL_ORDER))
 
     if hplot_frames:
@@ -659,7 +702,9 @@ def hplot_generation(
     model_output_dir = results_dir / model_output_subdir
     model_output_dir.mkdir(parents=True, exist_ok=True)
 
-    model_output_paths = [model_output_dir / p.with_suffix(".csv").name for p in slide_paths]
+    model_output_paths = [
+        model_output_dir / p.with_suffix(".csv").name for p in slide_paths
+    ]
     if len(model_output_paths) != len(slide_paths):
         raise errors.ResultsDirectoryNotFound(
             "The 'model-outputs-csv' and image directory were mismatched."
@@ -684,7 +729,16 @@ def hplot_generation(
         raise ValueError("base_type_list and target_type_list must be provided")
 
     hplot_df = pd.DataFrame(
-        {"id": [], "layer": [], "target_prop": [], "target_count": [], "base_prop": [], "base_count": [], "all_count": [], "distance": []}
+        {
+            "id": [],
+            "layer": [],
+            "target_prop": [],
+            "target_count": [],
+            "base_prop": [],
+            "base_count": [],
+            "all_count": [],
+            "distance": [],
+        }
     )
     # DISABLED: hmetrics_df init
     # hmetrics_df = pd.DataFrame(
@@ -716,7 +770,9 @@ def hplot_generation(
     graph_cache_dir.mkdir(parents=True, exist_ok=True)
 
     jobs = []
-    for wsi_path, model_output_csv in zip(slide_paths, model_output_paths):
+    for wsi_path, model_output_csv in zip(
+        slide_paths, model_output_paths, strict=False
+    ):
         if not model_output_csv.exists():
             failed_generation.append(wsi_path.stem)
             continue
@@ -809,15 +865,38 @@ def hplot_generation(
                     row.get("distance", np.nan),
                 )
                 for layer, row in clean_df.set_index("layer")[
-                    ["target_type_prop", "target_type_count", "base_type_prop", "base_type_count", "all_type_count", "distance"]
+                    [
+                        "target_type_prop",
+                        "target_type_count",
+                        "base_type_prop",
+                        "base_type_count",
+                        "all_type_count",
+                        "distance",
+                    ]
                 ].iterrows()
             }
 
             for layer in range(mn, mx + 1):
-                target_prop, target_count, base_prop, base_count, all_count, distance = layer_lookup.get(
+                (
+                    target_prop,
+                    target_count,
+                    base_prop,
+                    base_count,
+                    all_count,
+                    distance,
+                ) = layer_lookup.get(
                     layer, (np.nan, np.nan, np.nan, np.nan, np.nan, np.nan)
                 )
-                hplot_df.loc[len(hplot_df)] = [image_id, layer, target_prop, target_count, base_prop, base_count, all_count, distance]
+                hplot_df.loc[len(hplot_df)] = [
+                    image_id,
+                    layer,
+                    target_prop,
+                    target_count,
+                    base_prop,
+                    base_count,
+                    all_count,
+                    distance,
+                ]
 
             # DISABLED: hmetrics row append
             # hmetrics_df.loc[len(hmetrics_df)] = [

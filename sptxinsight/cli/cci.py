@@ -27,8 +27,10 @@ from __future__ import annotations
 import click
 
 from ..insightlib.cci_generation import cci_generation
-from ..uri_path import URIPath, URIPathType
-from ._common import _STORAGE_KWARGS, csv_to_list
+from ..uri_path import URIPath
+from ..uri_path import URIPathType
+from ._common import _STORAGE_KWARGS
+from ._common import csv_to_list
 
 
 @click.command()
@@ -45,8 +47,8 @@ from ._common import _STORAGE_KWARGS, csv_to_list
     type=URIPathType(exists=True, dir_okay=False, **_STORAGE_KWARGS),
     default=None,
     help="CSV/TSV of ligand-receptor pairs (columns ligand/receptor or "
-         "ligand_gene_symbol/receptor_gene_symbol). Defaults to the bundled "
-         "human_lr_pair.csv.",
+    "ligand_gene_symbol/receptor_gene_symbol). Defaults to the bundled "
+    "human_lr_pair.csv.",
 )
 @click.option(
     "--genes",
@@ -54,23 +56,47 @@ from ._common import _STORAGE_KWARGS, csv_to_list
     callback=csv_to_list,
     default=None,
     help="Comma/space separated gene list; keep only LR pairs whose ligand AND "
-         "receptor are in this list (intersected with the sample panel).",
+    "receptor are in this list (intersected with the sample panel).",
 )
-@click.option("--d-max", "d_max_um", default=25.0, show_default=True,
-              type=click.FloatRange(min=0, min_open=True),
-              help="Maximal neighbour distance (microns); prunes the Delaunay graph.")
-@click.option("--kernel", default="exponential", show_default=True,
-              type=click.Choice(["exponential", "gaussian", "binary"]),
-              help="Distance-decay weighting of neighbour edges. 'binary' = no "
-                   "decay (all neighbours within --d-max count equally).")
-@click.option("--lambda", "lam_um", default=25.0, show_default=True,
-              type=click.FloatRange(min=0, min_open=True),
-              help="Decay length (microns) for the exponential/gaussian kernel. "
-                   "Ignored for --kernel binary.")
-@click.option("--num-workers", default=4, show_default=True, type=click.IntRange(min=1),
-              help="Number of samples to process concurrently (threads).")
-@click.option("--overwrite", is_flag=True, default=False, show_default=True,
-              help="Recompute and overwrite existing per-sample CCI CSVs.")
+@click.option(
+    "--d-max",
+    "d_max_um",
+    default=25.0,
+    show_default=True,
+    type=click.FloatRange(min=0, min_open=True),
+    help="Maximal neighbour distance (microns); prunes the Delaunay graph.",
+)
+@click.option(
+    "--kernel",
+    default="exponential",
+    show_default=True,
+    type=click.Choice(["exponential", "gaussian", "binary"]),
+    help="Distance-decay weighting of neighbour edges. 'binary' = no "
+    "decay (all neighbours within --d-max count equally).",
+)
+@click.option(
+    "--lambda",
+    "lam_um",
+    default=25.0,
+    show_default=True,
+    type=click.FloatRange(min=0, min_open=True),
+    help="Decay length (microns) for the exponential/gaussian kernel. "
+    "Ignored for --kernel binary.",
+)
+@click.option(
+    "--num-workers",
+    default=4,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Number of samples to process concurrently (threads).",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Recompute and overwrite existing per-sample CCI CSVs.",
+)
 def cci(
     *,
     results_dir: URIPath,
@@ -83,10 +109,15 @@ def cci(
     overwrite: bool,
 ) -> None:
     """Score per-cell ligand-receptor cell-cell interactions (CCI)."""
-    stems = sorted(
-        p.stem for p in (results_dir / "model-outputs-csv").iterdir()
-        if p.suffix.lower() == ".csv"
-    ) if (results_dir / "model-outputs-csv").exists() else []
+    stems = (
+        sorted(
+            p.stem
+            for p in (results_dir / "model-outputs-csv").iterdir()
+            if p.suffix.lower() == ".csv"
+        )
+        if (results_dir / "model-outputs-csv").exists()
+        else []
+    )
     failed = cci_generation(
         results_dir,
         lr_pairs_path=lr_pairs_path,

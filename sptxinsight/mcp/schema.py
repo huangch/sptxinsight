@@ -45,7 +45,8 @@ _KIND_TO_JSON_TYPE: dict[str, str] = {
 
 def load_schema() -> dict[str, Any]:
     """Build and return the sptxinsight CLI schema live from the Click app."""
-    from sptxinsight.cli.cli import _describe_command, cli
+    from sptxinsight.cli.cli import _describe_command
+    from sptxinsight.cli.cli import cli
 
     commands: dict[str, Any] = {}
     for name, cmd in cli.commands.items():

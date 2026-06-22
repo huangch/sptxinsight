@@ -27,45 +27,54 @@ from __future__ import annotations
 import math
 import os
 from collections import deque
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import as_completed
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
+from typing import Dict
+from typing import Iterable
+from typing import List
+from typing import Mapping
+from typing import Optional
+from typing import Sequence
+from typing import Tuple
 
+import click
+import igraph as ig
 import joblib
+import leidenalg as la
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 from sklearn.cluster import KMeans
-from sklearn.metrics import normalized_mutual_info_score, silhouette_score
+from sklearn.metrics import normalized_mutual_info_score
+from sklearn.metrics import silhouette_score
 from sklearn.neighbors import kneighbors_graph
 from sklearn.preprocessing import StandardScaler
+from torch_geometric.data import Data
+from torch_geometric.loader import DataListLoader
+from torch_geometric.loader import DataLoader as GeoDataLoader
+from torch_geometric.nn import DataParallel as GeoDataParallel
+from torch_geometric.nn import GCNConv
+from torch_geometric.nn.models import DeepGraphInfomax
 from tqdm import tqdm
 
-import igraph as ig
-import leidenalg as la
-from torch_geometric.data import Data
-from torch_geometric.loader import DataListLoader, DataLoader as GeoDataLoader
-from torch_geometric.nn import DataParallel as GeoDataParallel, GCNConv
-from torch_geometric.nn.models import DeepGraphInfomax
-
 from .. import errors
-from ..cancel import critical_section, raise_if_cancelled
-from ..io._wsi_stub import _validate_wsi_directory, get_avg_mpp
+from ..cancel import critical_section
+from ..cancel import raise_if_cancelled
+from ..io._wsi_stub import _validate_wsi_directory
+from ..io._wsi_stub import get_avg_mpp
 from ..uri_path import URIPath
 from .graph_cache import get_or_build_delaunay
-from .insight_helpers import (
-    compute_cell_center_points,
-    create_adjacency_list_fast,
-    delaunay_triangulation,
-)
-
-import click
-
+from .insight_helpers import compute_cell_center_points
+from .insight_helpers import create_adjacency_list_fast
+from .insight_helpers import delaunay_triangulation
 
 # =============================================================================
 # Worker-count helpers (replacements for WSInsight's num_worker_optimizer)
 # =============================================================================
+
 
 def pick_workers_safe(max_workers: int | None = None, min_workers: int = 1) -> int:
     """Pick a process-pool size in ``[1, cpu_count]``.
@@ -88,8 +97,10 @@ def throttle_when_busy() -> None:
 # Utilities: probabilities, edges, isolation
 # =============================================================================
 
-def probs_from_df(df: pd.DataFrame,
-                  class_order: Optional[List[str]] = None) -> Tuple[np.ndarray, List[str]]:
+
+def probs_from_df(
+    df: pd.DataFrame, class_order: Optional[List[str]] = None
+) -> Tuple[np.ndarray, List[str]]:
     """Extract [N,C] soft probabilities from columns like 'prob_*'."""
     cols = [c for c in df.columns if c.startswith("prob_")]
     if class_order is not None:
@@ -100,7 +111,7 @@ def probs_from_df(df: pd.DataFrame,
         cols = want
         classes = class_order
     else:
-        classes = [c[len("prob_"):] for c in cols]
+        classes = [c[len("prob_") :] for c in cols]
 
     P = df[cols].to_numpy(dtype=np.float32)  # [N,C]
     s = P.sum(axis=1, keepdims=True) + 1e-8
@@ -108,17 +119,22 @@ def probs_from_df(df: pd.DataFrame,
     return P, classes
 
 
-def to_edge_index(edges_df: pd.DataFrame,
-                  src_col: str = "source", dst_col: str = "target",
-                  undirected: bool = True, drop_self_loops: bool = True) -> np.ndarray:
+def to_edge_index(
+    edges_df: pd.DataFrame,
+    src_col: str = "source",
+    dst_col: str = "target",
+    undirected: bool = True,
+    drop_self_loops: bool = True,
+) -> np.ndarray:
     """DataFrame -> edge_index [2,E]. Assumes 0-based indices already capped."""
     u = edges_df[src_col].to_numpy()
     v = edges_df[dst_col].to_numpy()
     if drop_self_loops:
-        keep = (u != v)
+        keep = u != v
         u, v = u[keep], v[keep]
     if undirected:
-        ei = np.r_[u, v]; ej = np.r_[v, u]
+        ei = np.r_[u, v]
+        ej = np.r_[v, u]
     else:
         ei, ej = u, v
     return np.vstack([ei, ej]).astype(np.int64)
@@ -137,7 +153,8 @@ def drop_isolated(edge_index: np.ndarray, N: int) -> Tuple[np.ndarray, np.ndarra
     # remap
     map_old2new = -np.ones(N, dtype=np.int64)
     map_old2new[kept] = np.arange(len(kept), dtype=np.int64)
-    ei_m = map_old2new[ei]; ej_m = map_old2new[ej]
+    ei_m = map_old2new[ei]
+    ej_m = map_old2new[ej]
     mask = (ei_m >= 0) & (ej_m >= 0)
     edge_index_new = np.vstack([ei_m[mask], ej_m[mask]]).astype(np.int64)
     return edge_index_new, kept
@@ -147,10 +164,17 @@ def drop_isolated(edge_index: np.ndarray, N: int) -> Tuple[np.ndarray, np.ndarra
 # k-hop composition (EXACT hop bins)
 # =============================================================================
 
-def _khop_rows_worker(start: int, end: int, k: int, alpha: float,
-                      P: np.ndarray, adj: dict,
-                      mode: str = "soft",
-                      labels: np.ndarray | None = None) -> np.ndarray:
+
+def _khop_rows_worker(
+    start: int,
+    end: int,
+    k: int,
+    alpha: float,
+    P: np.ndarray,
+    adj: dict,
+    mode: str = "soft",
+    labels: np.ndarray | None = None,
+) -> np.ndarray:
     """Compute X rows [start:end) using EXACT-hop BFS on 'adj'.
 
     Returns X_block with shape [(end-start), (k+1)*C].
@@ -204,23 +228,28 @@ def _khop_rows_worker(start: int, end: int, k: int, alpha: float,
             idx = bins[h]
             off = h * C
             if not idx:
-                Xblk[row, off:off + C] = 1.0 / C
+                Xblk[row, off : off + C] = 1.0 / C
                 continue
 
             if mode == "soft":
                 mean_prob = P[idx].mean(axis=0)
-                Xblk[row, off:off + C] = (mean_prob + (alpha / C)) / (1.0 + alpha)
+                Xblk[row, off : off + C] = (mean_prob + (alpha / C)) / (1.0 + alpha)
             else:
                 counts = np.bincount(labels[idx], minlength=C).astype(np.float32)
                 props = counts / counts.sum()
-                Xblk[row, off:off + C] = (props + (alpha / C)) / (1.0 + alpha)
+                Xblk[row, off : off + C] = (props + (alpha / C)) / (1.0 + alpha)
 
     return Xblk
 
 
-def khop_features(P: np.ndarray, edge_index: np.ndarray, N: int,
-                  k: int = 2, alpha: float = 1.0,
-                  mode: str = "soft") -> np.ndarray:
+def khop_features(
+    P: np.ndarray,
+    edge_index: np.ndarray,
+    N: int,
+    k: int = 2,
+    alpha: float = 1.0,
+    mode: str = "soft",
+) -> np.ndarray:
     """Build k-hop feature blocks X of shape [N, (k+1)*C].
 
     mode="soft":
@@ -242,15 +271,18 @@ def khop_features(P: np.ndarray, edge_index: np.ndarray, N: int,
             labels = P.argmax(axis=1)
             X[np.arange(N), labels] = 1.0  # 0-hop one-hot
         for h in range(1, k + 1):
-            X[:, h * C:(h + 1) * C] = 1.0 / C
+            X[:, h * C : (h + 1) * C] = 1.0 / C
         return X
 
     # Build undirected unique edge list -> adjacency
     ei, ej = edge_index
-    a = np.minimum(ei, ej); b = np.maximum(ei, ej)
+    a = np.minimum(ei, ej)
+    b = np.maximum(ei, ej)
     pairs = np.unique(np.stack([a, b], axis=1), axis=0)
     edges_df = pd.DataFrame({"source": pairs[:, 0], "target": pairs[:, 1]})
-    adj = create_adjacency_list_fast(edges_df, dedup_neighbors=True, sort_neighbors=False)
+    adj = create_adjacency_list_fast(
+        edges_df, dedup_neighbors=True, sort_neighbors=False
+    )
 
     # Output buffer and 0-hop block
     X = np.zeros((N, (k + 1) * C), dtype=np.float32)
@@ -264,7 +296,9 @@ def khop_features(P: np.ndarray, edge_index: np.ndarray, N: int,
         X[:, :C] = oh
 
     # Decide workers and chunking
-    max_workers = pick_workers_safe(max_workers=(os.cpu_count() or 1) - 8, min_workers=8)
+    max_workers = pick_workers_safe(
+        max_workers=(os.cpu_count() or 1) - 8, min_workers=8
+    )
     chunk_size = max(1, math.ceil(N / max_workers))
     ranges = [(s, min(s + chunk_size, N)) for s in range(0, N, chunk_size)]
 
@@ -285,8 +319,9 @@ def khop_features(P: np.ndarray, edge_index: np.ndarray, N: int,
     return X
 
 
-def khop_mean_features(V: np.ndarray, edge_index: np.ndarray, N: int,
-                       k: int = 2) -> np.ndarray:
+def khop_mean_features(
+    V: np.ndarray, edge_index: np.ndarray, N: int, k: int = 2
+) -> np.ndarray:
     """k-hop mean of node values (e.g. gene expression).
 
     Returns X of shape [N, (k+1)*G]:
@@ -305,10 +340,13 @@ def khop_mean_features(V: np.ndarray, edge_index: np.ndarray, N: int,
         return X
 
     ei, ej = edge_index
-    a = np.minimum(ei, ej); b = np.maximum(ei, ej)
+    a = np.minimum(ei, ej)
+    b = np.maximum(ei, ej)
     pairs = np.unique(np.stack([a, b], axis=1), axis=0)
     edges_df = pd.DataFrame({"source": pairs[:, 0], "target": pairs[:, 1]})
-    adj = create_adjacency_list_fast(edges_df, dedup_neighbors=True, sort_neighbors=False)
+    adj = create_adjacency_list_fast(
+        edges_df, dedup_neighbors=True, sort_neighbors=False
+    )
 
     for i in range(N):
         seen = {i}
@@ -327,13 +365,14 @@ def khop_mean_features(V: np.ndarray, edge_index: np.ndarray, N: int,
         for h in range(1, k + 1):
             idx = bins[h]
             if idx:
-                X[i, h * G:(h + 1) * G] = V[idx].mean(axis=0)
+                X[i, h * G : (h + 1) * G] = V[idx].mean(axis=0)
     return X
 
 
 # =============================================================================
 # PyG: GCN + DGI (shared across samples)
 # =============================================================================
+
 
 class GCLEncoder(nn.Module):
     def __init__(self, in_dim, hidden=64, out_dim=32, dropout=0.2):
@@ -386,22 +425,30 @@ class DGIModule(nn.Module):
 def train_dgi_multi(slides, hidden=64, out_dim=32, epochs=300, lr=1e-3, wd=1e-4):
     """Train a shared DGI encoder across sample graphs and return embeddings."""
     ngpu = torch.cuda.device_count() if torch.cuda.is_available() else 0
-    primary = torch.device('cuda:0' if ngpu > 0 else 'cpu')
+    primary = torch.device("cuda:0" if ngpu > 0 else "cpu")
 
     in_dim = slides[0]["X"].shape[1]
     enc = GCLEncoder(in_dim, hidden, out_dim).to(primary)
     model = DGIModule(enc)
 
-    data_list = [Data(x=torch.from_numpy(s["X"]).float(),
-                      edge_index=torch.from_numpy(s["edge_index"]).long())
-                 for s in slides]
+    data_list = [
+        Data(
+            x=torch.from_numpy(s["X"]).float(),
+            edge_index=torch.from_numpy(s["edge_index"]).long(),
+        )
+        for s in slides
+    ]
 
     if ngpu > 1:
         per_gpu_graphs = 1
         for cand in range(4, 0, -1):  # try 4,3,2,1
             try:
                 test_bs = cand * max(1, ngpu)
-                _ = DataListLoader(data_list[:test_bs], batch_size=test_bs).__iter__().__next__()
+                _ = (
+                    DataListLoader(data_list[:test_bs], batch_size=test_bs)
+                    .__iter__()
+                    .__next__()
+                )
                 per_gpu_graphs = cand
                 break
             except RuntimeError as e:
@@ -419,10 +466,14 @@ def train_dgi_multi(slides, hidden=64, out_dim=32, epochs=300, lr=1e-3, wd=1e-4)
 
     enc_out = enc.conv2.out_channels
     if ngpu > 1:
-        print(f"[DGI check] encoder_out_dim={enc_out}, dgi_hidden={model.module.dgi.hidden_channels}")
+        print(
+            f"[DGI check] encoder_out_dim={enc_out}, dgi_hidden={model.module.dgi.hidden_channels}"
+        )
         assert model.module.dgi.hidden_channels == enc_out
     else:
-        print(f"[DGI check] encoder_out_dim={enc_out}, dgi_hidden={model.dgi.hidden_channels}")
+        print(
+            f"[DGI check] encoder_out_dim={enc_out}, dgi_hidden={model.dgi.hidden_channels}"
+        )
         assert model.dgi.hidden_channels == enc_out
 
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
@@ -454,6 +505,7 @@ def train_dgi_multi(slides, hidden=64, out_dim=32, epochs=300, lr=1e-3, wd=1e-4)
 # =============================================================================
 # Sample-graph construction (k-hop composition only; no image features)
 # =============================================================================
+
 
 def prepare_slide_graph(
     cme_detection_df: pd.DataFrame,
@@ -510,8 +562,13 @@ def prepare_slide_graph(
     else:
         edges_df = delaunay_triangulation(centers_px, max_edge_len_px)
 
-    edge_index = to_edge_index(edges_df, src_col="source", dst_col="target",
-                               undirected=True, drop_self_loops=True)
+    edge_index = to_edge_index(
+        edges_df,
+        src_col="source",
+        dst_col="target",
+        undirected=True,
+        drop_self_loops=True,
+    )
     edge_index, kept_idx = drop_isolated(edge_index, N)
     if kept_idx.size == 0:
         raise ValueError("All nodes are isolated after distance cap; nothing to train.")
@@ -524,8 +581,9 @@ def prepare_slide_graph(
     if want_celltype:
         P_all, classes = probs_from_df(df, class_order=class_order)  # [N,C]
         P = P_all[kept_idx]  # [N_kept,C]
-        X_khop = khop_features(P=P, edge_index=edge_index, N=N_kept,
-                               k=k_hops, alpha=alpha, mode=mode)
+        X_khop = khop_features(
+            P=P, edge_index=edge_index, N=N_kept, k=k_hops, alpha=alpha, mode=mode
+        )
         blocks.append(X_khop.astype(np.float32))
 
     if want_expression:
@@ -553,14 +611,16 @@ def prepare_slide_graph(
             X_expr = khop_mean_features(V, edge_index=edge_index, N=N_kept, k=k_hops)
             blocks.append(X_expr.astype(np.float32))
         else:
-            genes = [c[len("expr_"):] for c in expr_cols]
+            genes = [c[len("expr_") :] for c in expr_cols]
             V = df[expr_cols].to_numpy(dtype=np.float32)
             V = np.nan_to_num(V)[kept_idx]
             X_expr = khop_mean_features(V, edge_index=edge_index, N=N_kept, k=k_hops)
             blocks.append(X_expr.astype(np.float32))
 
     if not blocks:
-        raise ValueError(f"No features built for sample {slide_id!r} (mode={feature_source}).")
+        raise ValueError(
+            f"No features built for sample {slide_id!r} (mode={feature_source})."
+        )
 
     X = np.hstack(blocks).astype(np.float32)
 
@@ -579,8 +639,9 @@ def prepare_slide_graph(
 # Clustering: Leiden sweep / KMeans on DGI embeddings
 # =============================================================================
 
+
 def _knn_graph_connectivity(Z: np.ndarray, k_nn: int = 15):
-    A = kneighbors_graph(Z, n_neighbors=k_nn, mode='connectivity', include_self=False)
+    A = kneighbors_graph(Z, n_neighbors=k_nn, mode="connectivity", include_self=False)
     A = A.maximum(A.T).tocsr()  # symmetrize
     return A
 
@@ -588,19 +649,24 @@ def _knn_graph_connectivity(Z: np.ndarray, k_nn: int = 15):
 def _igraph_from_sparse(A) -> ig.Graph:
     """Convert a scipy sparse adjacency matrix to an undirected igraph graph."""
     A = A.tocoo()
-    g = ig.Graph(n=A.shape[0], edges=list(zip(A.row.tolist(), A.col.tolist())), directed=False)
+    g = ig.Graph(
+        n=A.shape[0],
+        edges=list(zip(A.row.tolist(), A.col.tolist(), strict=False)),
+        directed=False,
+    )
     g.simplify(combine_edges="ignore")
     return g
 
 
-def _leiden_worker(n_nodes: int,
-                   edges: np.ndarray,
-                   resolution: float) -> Tuple[np.ndarray, float, float]:
+def _leiden_worker(
+    n_nodes: int, edges: np.ndarray, resolution: float
+) -> Tuple[np.ndarray, float, float]:
     """Run a single Leiden clustering pass and return labels plus modularity."""
     g_local = ig.Graph(n=n_nodes, edges=edges.tolist(), directed=False)
     g_local.simplify(combine_edges="ignore")
     part = la.find_partition(
-        g_local, la.RBConfigurationVertexPartition,
+        g_local,
+        la.RBConfigurationVertexPartition,
         resolution_parameter=float(resolution),
     )
     labels = np.asarray(part.membership, dtype=int)
@@ -620,7 +686,11 @@ def _reduce_resolution_worker(args):
     stability = float(np.mean(nmis)) if nmis else 0.0
 
     if len(np.unique(best_labels)) > 1:
-        sil = float(silhouette_score(Z, best_labels, sample_size=np.min([len(Z), 10000]), metric='euclidean'))
+        sil = float(
+            silhouette_score(
+                Z, best_labels, sample_size=np.min([len(Z), 10000]), metric="euclidean"
+            )
+        )
     else:
         sil = -1.0
 
@@ -654,8 +724,12 @@ def _leiden_sweep_on_graph(
         labels = np.zeros(n_nodes, dtype=int)
         out = {
             "resolution": float(next(iter(cme_clustering_resolutions), 1.0)),
-            "n_clusters": 1, "modularity": 0.0, "stability": 1.0,
-            "silhouette": -1.0, "min_frac": 1.0, "labels": labels,
+            "n_clusters": 1,
+            "modularity": 0.0,
+            "stability": 1.0,
+            "silhouette": -1.0,
+            "min_frac": 1.0,
+            "labels": labels,
         }
         return {"winner": out, "all": [out]}
 
@@ -677,7 +751,10 @@ def _leiden_sweep_on_graph(
     # ---- Phase B: parallel reduction per resolution ----
     logs = []
     with ProcessPoolExecutor(max_workers=n_jobs) as ex:
-        futs = [ex.submit(_reduce_resolution_worker, (r, results_by_r[r], Z)) for r in results_by_r.keys()]
+        futs = [
+            ex.submit(_reduce_resolution_worker, (r, results_by_r[r], Z))
+            for r in results_by_r.keys()
+        ]
         for fut in as_completed(futs):
             throttle_when_busy()
             logs.append(fut.result())
@@ -685,16 +762,20 @@ def _leiden_sweep_on_graph(
     logs.sort(key=lambda d: d["resolution"])
 
     filtered = [d for d in logs if d["min_frac"] >= 0.005] or logs
-    winner = sorted(filtered, key=lambda d: (d["stability"], d["modularity"], d["silhouette"]), reverse=True)[0]
+    winner = sorted(
+        filtered,
+        key=lambda d: (d["stability"], d["modularity"], d["silhouette"]),
+        reverse=True,
+    )[0]
 
     return {"winner": winner, "all": logs}
 
 
 def estimate_cmes_from_Z_list(
     Z_list: List[np.ndarray],
-    mode: str = "global",           # "global" (recommended) or "per_slide"
+    mode: str = "global",  # "global" (recommended) or "per_slide"
     k_nn: int = 15,
-    cme_clustering_resolutions=np.arange(0.2, 2.05, 0.1),
+    cme_clustering_resolutions=np.arange(0.2, 2.05, 0.1),  # noqa: B008
     n_repeats: int = 5,
 ) -> Dict[str, Any]:
     """Auto-estimate the number of CMEs via a Leiden community-detection sweep."""
@@ -703,14 +784,17 @@ def estimate_cmes_from_Z_list(
         Z_all = np.vstack(Z_list)
         A = _knn_graph_connectivity(Z_all, k_nn=k_nn)
         g = _igraph_from_sparse(A)
-        sweep = _leiden_sweep_on_graph(Z_all, g,
-                                       cme_clustering_resolutions=cme_clustering_resolutions,
-                                       n_repeats=n_repeats)
+        sweep = _leiden_sweep_on_graph(
+            Z_all,
+            g,
+            cme_clustering_resolutions=cme_clustering_resolutions,
+            n_repeats=n_repeats,
+        )
         w = sweep["winner"]
         labels_all = w["labels"]
         labels_list = []
-        for off, Z in zip(offsets, Z_list):
-            labels_list.append(labels_all[off:off + len(Z)])
+        for off, Z in zip(offsets, Z_list, strict=False):
+            labels_list.append(labels_all[off : off + len(Z)])
         return {
             "clusters_k": w["n_clusters"],
             "labels_list": labels_list,
@@ -726,9 +810,12 @@ def estimate_cmes_from_Z_list(
         for Z in Z_list:
             A = _knn_graph_connectivity(Z, k_nn=k_nn)
             g = _igraph_from_sparse(A)
-            sweep = _leiden_sweep_on_graph(Z, g,
-                                           cme_clustering_resolutions=cme_clustering_resolutions,
-                                           n_repeats=n_repeats)
+            sweep = _leiden_sweep_on_graph(
+                Z,
+                g,
+                cme_clustering_resolutions=cme_clustering_resolutions,
+                n_repeats=n_repeats,
+            )
             w = sweep["winner"]
             labels_list.append(w["labels"])
             winners.append(w)
@@ -768,9 +855,9 @@ def _mpp_for(wsi_path, slide_mpp_lookup: Mapping[str, float] | None) -> float:
 # same cells without clobbering each other. ``celltype`` keeps the original
 # (unsuffixed) paths and ``cme_`` prefix for backward compatibility.
 _CME_MODE_SPEC: Dict[str, Dict[str, str]] = {
-    "celltype":   {"subdir": "cme-outputs-csv",        "prefix": "cme",    "ckpt": ""},
-    "expression": {"subdir": "cme-gex-outputs-csv",    "prefix": "gexcme", "ckpt": "-gex"},
-    "both":       {"subdir": "cme-hybrid-outputs-csv", "prefix": "hcme",   "ckpt": "-hybrid"},
+    "celltype": {"subdir": "cme-outputs-csv", "prefix": "cme", "ckpt": ""},
+    "expression": {"subdir": "cme-gex-outputs-csv", "prefix": "gexcme", "ckpt": "-gex"},
+    "both": {"subdir": "cme-hybrid-outputs-csv", "prefix": "hcme", "ckpt": "-hybrid"},
 }
 
 
@@ -787,8 +874,9 @@ def center_per_sample(Z_list: List[np.ndarray]) -> List[np.ndarray]:
     return [(Z - Z.mean(axis=0) + grand).astype(np.float32) for Z in Z_list]
 
 
-def _harmony_correct(Z_list: List[np.ndarray],
-                     sample_ids: Sequence[str]) -> List[np.ndarray]:
+def _harmony_correct(
+    Z_list: List[np.ndarray], sample_ids: Sequence[str]
+) -> List[np.ndarray]:
     """Harmony batch correction over the pooled DGI embeddings (optional dep)."""
     try:
         from harmonypy import run_harmony
@@ -807,14 +895,14 @@ def _harmony_correct(Z_list: List[np.ndarray],
     out: List[np.ndarray] = []
     off = 0
     for n in lengths:
-        out.append(Z_corr[off:off + n])
+        out.append(Z_corr[off : off + n])
         off += n
     return out
 
 
-def _apply_batch_correction(Z_list: List[np.ndarray],
-                            batch_correct: str,
-                            sample_ids: Sequence[str]) -> List[np.ndarray]:
+def _apply_batch_correction(
+    Z_list: List[np.ndarray], batch_correct: str, sample_ids: Sequence[str]
+) -> List[np.ndarray]:
     """Dispatch ``none`` / ``center`` / ``harmony`` correction on ``Z_list``."""
     if batch_correct in (None, "none"):
         return Z_list
@@ -822,7 +910,9 @@ def _apply_batch_correction(Z_list: List[np.ndarray],
         return center_per_sample(Z_list)
     if batch_correct == "harmony":
         return _harmony_correct(Z_list, sample_ids)
-    raise ValueError(f"batch_correct must be none/center/harmony, got {batch_correct!r}")
+    raise ValueError(
+        f"batch_correct must be none/center/harmony, got {batch_correct!r}"
+    )
 
 
 def _fit_expression_pca(model_output_paths: Sequence[Path], n_components: int):
@@ -845,7 +935,9 @@ def _fit_expression_pca(model_output_paths: Sequence[Path], n_components: int):
 
     expr_cols: Optional[List[str]] = None
     for p in model_output_paths:
-        cols = sorted(c for c in pd.read_csv(p, nrows=0).columns if c.startswith("expr_"))
+        cols = sorted(
+            c for c in pd.read_csv(p, nrows=0).columns if c.startswith("expr_")
+        )
         if cols:
             expr_cols = cols
             break
@@ -859,7 +951,11 @@ def _fit_expression_pca(model_output_paths: Sequence[Path], n_components: int):
         head = pd.read_csv(p, nrows=0).columns
         if not any(c.startswith("expr_") for c in head):
             continue
-        V = pd.read_csv(p, usecols=expr_cols).reindex(columns=expr_cols).to_numpy(np.float32)
+        V = (
+            pd.read_csv(p, usecols=expr_cols)
+            .reindex(columns=expr_cols)
+            .to_numpy(np.float32)
+        )
         V = np.nan_to_num(V)
         if V.shape[0] < n_comp:  # IncrementalPCA needs >= n_components rows per batch
             continue
@@ -873,6 +969,7 @@ def _fit_expression_pca(model_output_paths: Sequence[Path], n_components: int):
 # =============================================================================
 # End-to-end multi-sample training + clustering
 # =============================================================================
+
 
 def cme_generation(
     wsi_dir: str | URIPath | None,
@@ -891,7 +988,7 @@ def cme_generation(
     cme_cellular: bool = False,
     cme_annotation: bool = False,
     cme_clustering_k: int | None = 10,
-    cme_clustering_resolutions: List[float] = [0.5, 1.0, 2.0],
+    cme_clustering_resolutions: List[float] = [0.5, 1.0, 2.0],  # noqa: B006
     cme_soft_mode: bool = False,
     use_expression: bool = False,
     cme_mode: str = "celltype",
@@ -918,7 +1015,9 @@ def cme_generation(
     if use_expression and cme_mode == "celltype":
         cme_mode = "both"
     if cme_mode not in _CME_MODE_SPEC:
-        raise ValueError(f"cme_mode must be one of {sorted(_CME_MODE_SPEC)}, got {cme_mode!r}")
+        raise ValueError(
+            f"cme_mode must be one of {sorted(_CME_MODE_SPEC)}, got {cme_mode!r}"
+        )
     mode_spec = _CME_MODE_SPEC[cme_mode]
 
     if os.getenv("SPTXINSIGHT_FORCE_CPU", "0").lower() not in {"0", "f", "false"}:
@@ -933,7 +1032,9 @@ def cme_generation(
 
     wsi_dir_path = URIPath(wsi_dir) if wsi_dir is not None else None
     if wsi_dir_path is not None and not wsi_dir_path.exists():
-        raise errors.WholeSlideImageDirectoryNotFound(f"directory not found: {wsi_dir_path}")
+        raise errors.WholeSlideImageDirectoryNotFound(
+            f"directory not found: {wsi_dir_path}"
+        )
 
     if wsi_paths is not None:
         slide_paths = [p if isinstance(p, URIPath) else URIPath(p) for p in wsi_paths]
@@ -964,7 +1065,9 @@ def cme_generation(
         raise errors.ResultsDirectoryNotFound(
             "The 'model-outputs-csv' directory was not found in results directory."
         )
-    model_output_paths = [model_output_dir / p.with_suffix(".csv").name for p in slide_paths]
+    model_output_paths = [
+        model_output_dir / p.with_suffix(".csv").name for p in slide_paths
+    ]
 
     if len(model_output_paths) != len(slide_paths):
         raise errors.ResultsDirectoryNotFound(
@@ -981,8 +1084,12 @@ def cme_generation(
     # --disable-pca never silently reuses an incompatible cached graph/embedding.
     pca_on = cme_mode in ("expression", "both") and bool(expression_pca)
     pca_tag = f"-pca{int(expression_pca)}" if pca_on else ""
-    cme_slide_graph_file = results_dir / f"slide-graphs{mode_spec['ckpt']}{pca_tag}.joblib"
-    cme_dgi_embeddings_file = results_dir / f"dgi-embeddings{mode_spec['ckpt']}{pca_tag}.joblib"
+    cme_slide_graph_file = (
+        results_dir / f"slide-graphs{mode_spec['ckpt']}{pca_tag}.joblib"
+    )
+    cme_dgi_embeddings_file = (
+        results_dir / f"dgi-embeddings{mode_spec['ckpt']}{pca_tag}.joblib"
+    )
 
     if overwrite:
         for _ckpt in (cme_slide_graph_file, cme_dgi_embeddings_file):
@@ -994,8 +1101,11 @@ def cme_generation(
     classes = None
 
     if cme_slide_graph_file.exists():
-        click.secho("\nPhase 1/5: Build sample graphs for CMEGCN.\n"
-                    f"Load existing graph file: {cme_slide_graph_file}\n", fg="green")
+        click.secho(
+            "\nPhase 1/5: Build sample graphs for CMEGCN.\n"
+            f"Load existing graph file: {cme_slide_graph_file}\n",
+            fg="green",
+        )
         slides = joblib.load(cme_slide_graph_file)
     else:
         click.secho("\nPhase 1/5: build sample graphs for CMEGCN.\n", fg="green")
@@ -1009,21 +1119,31 @@ def cme_generation(
         expr_pca = None
         expr_pca_cols = None
         if pca_on:
-            click.secho(f"Fitting shared expression PCA ({int(expression_pca)} comps) "
-                        f"on pooled cohort...", fg="green")
+            click.secho(
+                f"Fitting shared expression PCA ({int(expression_pca)} comps) "
+                f"on pooled cohort...",
+                fg="green",
+            )
             fitted = _fit_expression_pca(model_output_paths, int(expression_pca))
             if fitted is None:
-                click.secho("  No expr_ columns found; continuing without PCA.", fg="yellow")
+                click.secho(
+                    "  No expr_ columns found; continuing without PCA.", fg="yellow"
+                )
             else:
                 expr_pca, expr_pca_cols = fitted
                 evr = float(np.sum(expr_pca.explained_variance_ratio_))
-                click.secho(f"  PCA basis: {expr_pca.n_components_} comps over "
-                            f"{len(expr_pca_cols)} genes (cum. EVR={evr:.3f}).", fg="green")
+                click.secho(
+                    f"  PCA basis: {expr_pca.n_components_} comps over "
+                    f"{len(expr_pca_cols)} genes (cum. EVR={evr:.3f}).",
+                    fg="green",
+                )
 
         # Sequential over samples so khop_features' inner process pool is not
         # nested inside an outer one.
-        for wsi_path, csv_path in tqdm(list(zip(slide_paths, model_output_paths)),
-                                       total=len(slide_paths)):
+        for wsi_path, csv_path in tqdm(
+            list(zip(slide_paths, model_output_paths, strict=False)),
+            total=len(slide_paths),
+        ):
             raise_if_cancelled()
             model_output_df = pd.read_csv(csv_path)
             slide_id = Path(str(wsi_path)).stem
@@ -1056,42 +1176,65 @@ def cme_generation(
 
     # ---- Phase 2/5: shared DGI encoder + embeddings ------------------------
     if cme_dgi_embeddings_file.exists():
-        click.secho("\nPhase 2/5: Train shared DGI encoder and get embeddings per sample.\n"
-                    f"Load existing embeddings file: {cme_dgi_embeddings_file}\n", fg="green")
+        click.secho(
+            "\nPhase 2/5: Train shared DGI encoder and get embeddings per sample.\n"
+            f"Load existing embeddings file: {cme_dgi_embeddings_file}\n",
+            fg="green",
+        )
         Z_list = joblib.load(cme_dgi_embeddings_file)
     else:
-        click.secho("\nPhase 2/5: Train shared DGI encoder and get embeddings per sample.\n", fg="green")
-        _, Z_list = train_dgi_multi(slides, hidden=hidden, out_dim=out_dim, epochs=epochs)
+        click.secho(
+            "\nPhase 2/5: Train shared DGI encoder and get embeddings per sample.\n",
+            fg="green",
+        )
+        _, Z_list = train_dgi_multi(
+            slides, hidden=hidden, out_dim=out_dim, epochs=epochs
+        )
         joblib.dump(Z_list, cme_dgi_embeddings_file, compress=3)
 
     # ---- Phase 2b/5: cross-sample batch correction on embeddings -----------
     # Applied AFTER (re)loading the raw embeddings so the checkpoint stays
     # correction-agnostic and the method can be changed between runs.
     if batch_correct not in (None, "none"):
-        click.secho(f"\nPhase 2b/5: Apply '{batch_correct}' cross-sample batch correction.\n",
-                    fg="green")
+        click.secho(
+            f"\nPhase 2b/5: Apply '{batch_correct}' cross-sample batch correction.\n",
+            fg="green",
+        )
         sample_ids = [Path(str(p)).stem for p in slide_paths]
         Z_list = _apply_batch_correction(Z_list, batch_correct, sample_ids)
 
     # ---- Phase 3/5: choose cluster count -----------------------------------
     if not cme_clustering_k:
         click.secho("\nPhase 3/5: Estimate CME cluster number.\n", fg="green")
-        est = estimate_cmes_from_Z_list(Z_list, mode="global",
-                                        cme_clustering_resolutions=cme_clustering_resolutions,
-                                        k_nn=15)
-        cme_clustering_k = est['winner']['n_clusters']
+        est = estimate_cmes_from_Z_list(
+            Z_list,
+            mode="global",
+            cme_clustering_resolutions=cme_clustering_resolutions,
+            k_nn=15,
+        )
+        cme_clustering_k = est["winner"]["n_clusters"]
         labels_list = est["labels_list"]
     else:
-        click.secho(f"\nPhase 3/5: Use predefined CME cluster number: cme_clustering_k={cme_clustering_k}.\n",
-                    fg="green")
-        labels_list = [KMeans(n_clusters=cme_clustering_k, n_init='auto').fit_predict(Z).astype(np.int32)
-                       for Z in Z_list]
+        click.secho(
+            f"\nPhase 3/5: Use predefined CME cluster number: cme_clustering_k={cme_clustering_k}.\n",
+            fg="green",
+        )
+        labels_list = [
+            KMeans(n_clusters=cme_clustering_k, n_init="auto")
+            .fit_predict(Z)
+            .astype(np.int32)
+            for Z in Z_list
+        ]
 
     # ---- Phase 4/5: cellular-level CME labels ------------------------------
-    click.secho("\nPhase 4/5: Perform cellular-level CME analysis per sample.\n", fg="green")
+    click.secho(
+        "\nPhase 4/5: Perform cellular-level CME analysis per sample.\n", fg="green"
+    )
     if cme_cellular:
-        for i, (wsi_path, model_output_csv) in tqdm(enumerate(zip(slide_paths, model_output_paths)),
-                                                    total=len(slide_paths)):
+        for i, (wsi_path, model_output_csv) in tqdm(
+            enumerate(zip(slide_paths, model_output_paths, strict=False)),
+            total=len(slide_paths),
+        ):
             raise_if_cancelled()
             cme_csv_name = Path(str(wsi_path)).with_suffix(".csv").name
             cell_csv = cme_cells_output_dir / cme_csv_name
@@ -1103,43 +1246,59 @@ def cme_generation(
 
             slide_classes = slides[i]["classes"]
             slide_genes = slides[i].get("genes", [])
-            feature_normalized_cols = (
-                [f"feature_normalized_k{k}_{c.replace('prob_', '')}"
-                 for k in range(k_hops + 1) for c in slide_classes]
-                + [f"feature_normalized_k{k}_expr_{g}"
-                   for k in range(k_hops + 1) for g in slide_genes]
-            )
-            feature_cols = (
-                [f"feature_raw_k{k}_{c.replace('prob_', '')}"
-                 for k in range(k_hops + 1) for c in slide_classes]
-                + [f"feature_raw_k{k}_expr_{g}"
-                   for k in range(k_hops + 1) for g in slide_genes]
-            )
-            cme_detection_df.loc[slides[i]["kept_idx"], feature_normalized_cols] = slides[i]["X_normalized"]
+            feature_normalized_cols = [
+                f"feature_normalized_k{k}_{c.replace('prob_', '')}"
+                for k in range(k_hops + 1)
+                for c in slide_classes
+            ] + [
+                f"feature_normalized_k{k}_expr_{g}"
+                for k in range(k_hops + 1)
+                for g in slide_genes
+            ]
+            feature_cols = [
+                f"feature_raw_k{k}_{c.replace('prob_', '')}"
+                for k in range(k_hops + 1)
+                for c in slide_classes
+            ] + [
+                f"feature_raw_k{k}_expr_{g}"
+                for k in range(k_hops + 1)
+                for g in slide_genes
+            ]
+            cme_detection_df.loc[
+                slides[i]["kept_idx"], feature_normalized_cols
+            ] = slides[i]["X_normalized"]
             cme_detection_df.loc[slides[i]["kept_idx"], feature_cols] = slides[i]["X"]
-            cme_cols = [f"{mode_spec['prefix']}_{l}" for l in range(cme_clustering_k)]
+            cme_cols = [
+                f"{mode_spec['prefix']}_{idx}" for idx in range(cme_clustering_k)
+            ]
             label_one_hot = np.eye(cme_clustering_k, dtype=np.float32)[labels_list[i]]
             cme_detection_df.loc[slides[i]["kept_idx"], cme_cols] = label_one_hot
 
-            with critical_section(f"saving CME cell output for {Path(str(wsi_path)).stem}"):
+            with critical_section(
+                f"saving CME cell output for {Path(str(wsi_path)).stem}"
+            ):
                 cme_detection_df.to_csv(cell_csv, index=False)
 
     # ---- Phase 5/5: annotation-level CME regions ---------------------------
-    click.secho("\nPhase 5/5: Perform annotation-level CME analysis per sample.\n", fg="green")
+    click.secho(
+        "\nPhase 5/5: Perform annotation-level CME analysis per sample.\n", fg="green"
+    )
     if cme_annotation:
         try:
             from .vorononi_cme_region_helper import (
                 merge_same_label_by_shared_edges_iterative,
-                remap_edges_to_valid_indices,
             )
+            from .vorononi_cme_region_helper import remap_edges_to_valid_indices
         except ImportError as exc:
             raise RuntimeError(
                 "Annotation-level CME regions need geopandas and shapely. "
                 "Install them with: pip install geopandas shapely."
             ) from exc
 
-        for i, (wsi_path, model_output_csv) in tqdm(enumerate(zip(slide_paths, model_output_paths)),
-                                                    total=len(slide_paths)):
+        for i, (wsi_path, _model_output_csv) in tqdm(
+            enumerate(zip(slide_paths, model_output_paths, strict=False)),
+            total=len(slide_paths),
+        ):
             raise_if_cancelled()
             cme_csv_name = Path(str(wsi_path)).with_suffix(".csv").name
             cell_csv = cme_cells_output_dir / cme_csv_name
@@ -1152,7 +1311,7 @@ def cme_generation(
             cme_detection_df = pd.read_csv(cell_csv)
             valid_mask = np.zeros(len(cme_detection_df), dtype=bool)
             valid_mask[np.asarray(slides[i]["kept_idx"], dtype=int)] = True
-            edges_df = remap_edges_to_valid_indices(slides[i]['edges_df'], valid_mask)
+            edges_df = remap_edges_to_valid_indices(slides[i]["edges_df"], valid_mask)
 
             cme_annotation_df = merge_same_label_by_shared_edges_iterative(
                 cme_detection_df,
@@ -1163,5 +1322,7 @@ def cme_generation(
                 cme_prefix=f"{mode_spec['prefix']}_",
             )
 
-            with critical_section(f"saving CME annotation output for {Path(str(wsi_path)).stem}"):
+            with critical_section(
+                f"saving CME annotation output for {Path(str(wsi_path)).stem}"
+            ):
                 cme_annotation_df.to_csv(cme_csv, index=False)

@@ -24,7 +24,7 @@ def main() -> None:
         cli()
     except (click.Abort, KeyboardInterrupt):
         click.secho("\nsptxinsight: aborted by user.", fg="yellow", err=True)
-        raise SystemExit(130)
+        raise SystemExit(130) from None
 
 
 if __name__ == "__main__":
