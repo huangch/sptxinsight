@@ -76,6 +76,7 @@ selects the sample loader; `--log-level` sets verbosity.
 | `cme` | Discover cellular microenvironments (niches) across ingested samples. |
 | `cme-profile` | Summarise each CME's cell composition and marker genes to name niches. |
 | `hplot`, `hplot-finalize` | Experimental; hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
+| `agg` | Experimental; detect cell-type aggregates (e.g. TLS) namespaced by `--agg-name`; hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
 
 Typical end-to-end run:
 

@@ -201,6 +201,22 @@ def _worker(
                 resolved.append(actual)
         return resolved
 
+    # Aggregate membership columns written by `sptxinsight agg`:
+    # object_<name>_prob_<name> (1.0 = member, 0.0 = not).
+    _obj_lower_to_actual = {
+        c.lower(): c for c in nodes_df.columns.to_list() if c.lower().startswith("object_")
+    }
+
+    def _resolve_aggregates(type_list: Sequence[str]) -> list[str]:
+        """Map aggregate names to their object_<name>_prob_<name> columns."""
+        resolved = []
+        for t in type_list:
+            name = str(t).strip().lower()
+            actual = _obj_lower_to_actual.get(f"object_{name}_prob_{name}")
+            if actual is not None and actual not in resolved:
+                resolved.append(actual)
+        return resolved
+
     # ---- base membership: cell type (prob idxmax) OR gene (expr threshold) OR cme ----
     if base_by == "gene":
         base_expr_cols = _resolve_genes(base_type_list)
@@ -237,6 +253,17 @@ def _worker(
         nodes_df["is_base_type"] = (
             nodes_df[base_cci_cols].mean(axis=1) > base_gene_threshold
         )
+    elif base_by == "aggregate":
+        base_agg_cols = _resolve_aggregates(base_type_list)
+        if not base_agg_cols:
+            _logger.warning(
+                "[%s] None of the base aggregates %s matched object_<name>_prob_<name> "
+                "columns %s. Run `sptxinsight agg` first. Skipping slide.",
+                slide_id, sorted(base_type_list), sorted(_obj_lower_to_actual.values()),
+            )
+            inner.close()
+            return slide_id, None, None
+        nodes_df["is_base_type"] = nodes_df[base_agg_cols].fillna(0).max(axis=1) > 0
     else:
         base_targets = _resolve_types(base_type_list)
         if not base_targets:
@@ -288,6 +315,21 @@ def _worker(
             return slide_id, None, None
         # Continuous score; its per-layer mean is the layer curve (like genes).
         target_value = nodes_df[target_cci_cols].mean(axis=1)
+        nodes_df["target_value"] = target_value
+        nodes_df["is_target_type"] = target_value > 0
+    elif target_by == "aggregate":
+        target_agg_cols = _resolve_aggregates(target_type_list)
+        if not target_agg_cols:
+            _logger.warning(
+                "[%s] None of the target aggregates %s matched object_<name>_prob_<name> "
+                "columns %s. Run `sptxinsight agg` first. Skipping slide.",
+                slide_id, sorted(target_type_list), sorted(_obj_lower_to_actual.values()),
+            )
+            inner.close()
+            return slide_id, None, None
+        # One-hot membership: max over requested object_ columns is 0/1 per cell,
+        # so its per-layer mean is exactly the aggregate proportion.
+        target_value = nodes_df[target_agg_cols].fillna(0).max(axis=1)
         nodes_df["target_value"] = target_value
         nodes_df["is_target_type"] = target_value > 0
     else:

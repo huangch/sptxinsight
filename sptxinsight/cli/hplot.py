@@ -43,15 +43,17 @@ def _slide_paths_from_results(results_dir: URIPath) -> tuple[list[URIPath], dict
 @click.option("--target-type", "target_types", callback=csv_to_list, default=None,
               help="Target cell type(s)/gene(s)/CME id(s) whose layer-wise proportion is computed.")
 @click.option("--base-by", default="celltype", show_default=True,
-              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci"]),
+              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci", "aggregate"]),
               help="Interpret --base-type as cell types, genes, a CME niche family "
-                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), or "
-                   "cci (ligand-receptor score columns from `sptxinsight cci`).")
+                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), "
+                   "cci (ligand-receptor score columns from `sptxinsight cci`), or "
+                   "aggregate (object_<name>_prob_<name> columns from `sptxinsight agg`).")
 @click.option("--target-by", default="celltype", show_default=True,
-              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci"]),
+              type=click.Choice(["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci", "aggregate"]),
               help="Interpret --target-type as cell types, genes, a CME niche family "
-                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), or "
-                   "cci (ligand-receptor score columns from `sptxinsight cci`).")
+                   "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), "
+                   "cci (ligand-receptor score columns from `sptxinsight cci`), or "
+                   "aggregate (object_<name>_prob_<name> columns from `sptxinsight agg`).")
 @click.option("--base-gene-threshold", default=0.0, show_default=True, type=float,
               help="Mean expression above which a cell counts as base (only for --base-by gene).")
 @click.option("--hplot-max-neighbor-distance", default=25.0, type=click.FloatRange(min=0),
