@@ -192,6 +192,12 @@ results/
   hplot-outputs.csv              # aggregated, gap-filled layer table
 ```
 
+H-Plot uses WSInsight's naming pattern: `layer` is the signed graph-hop index
+from the base-region border, and `distance_um` is the cumulative physical
+distance in microns. Per-cell outputs expose hop semantics explicitly through
+`hplot_layer` / `signed_distance_to_border_hops`; legacy
+`signed_distance_to_border` is only a backward-compatible hop alias.
+
 ---
 
 ## 6. License

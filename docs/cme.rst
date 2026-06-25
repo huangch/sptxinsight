@@ -115,3 +115,7 @@ Niches as an H-Plot axis
 ``--base-by`` / ``--target-by`` accept ``celltype`` (default), ``gene``, or a
 CME niche family — ``cme``, ``cmegex``, or ``cmehybrid``. When both axes are CME
 families they must be the same family.
+
+H-Plot output follows the WSInsight distance contract: ``layer`` is the signed
+graph-hop index from the base-region border, and ``distance_um`` is the
+cumulative physical distance in microns derived from Delaunay edge lengths.

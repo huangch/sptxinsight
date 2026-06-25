@@ -725,7 +725,7 @@ def identify_border_cells(
 
 def calculate_distance_to_border(model_output_df, adjacency_list, A_sparse=None):
     """
-    Calculates the shortest edge count from every cell to the nearest base border cell.
+    Calculates the shortest graph-hop count from every cell to the nearest base border cell.
 
     When A_sparse is supplied (preferred), uses scipy multi-source BFS via a
     virtual source node — all done in C, no Python BFS loop.
@@ -737,8 +737,9 @@ def calculate_distance_to_border(model_output_df, adjacency_list, A_sparse=None)
         A_sparse: optional 1-hop symmetric sparse adjacency matrix (uint8 CSR).
 
     Returns:
-        The DataFrame with new columns 'distance_to_border' and
-        'signed_distance_to_border'.
+        The DataFrame with explicit hop/layer columns plus legacy aliases:
+        'distance_to_border_hops', 'signed_distance_to_border_hops',
+        'hplot_layer', 'distance_to_border', and 'signed_distance_to_border'.
     """
     N = len(model_output_df)
     border_mask = model_output_df["is_base_border"].to_numpy(dtype=bool)
@@ -795,30 +796,46 @@ def calculate_distance_to_border(model_output_df, adjacency_list, A_sparse=None)
             [edge_distance_to_border[i] for i in model_output_df.index], dtype=float
         )
 
-    model_output_df["distance_to_border"] = edge_dist
-    model_output_df["signed_distance_to_border"] = edge_dist.copy()
+    model_output_df["distance_to_border_hops"] = edge_dist
+    model_output_df["signed_distance_to_border_hops"] = edge_dist.copy()
     model_output_df.loc[
-        model_output_df["is_base_region"], "signed_distance_to_border"
+        model_output_df["is_base_region"], "signed_distance_to_border_hops"
     ] *= -1
-    model_output_df["signed_distance_to_border"] = model_output_df[
-        "signed_distance_to_border"
+    model_output_df["signed_distance_to_border_hops"] = model_output_df[
+        "signed_distance_to_border_hops"
     ].replace([np.inf, -np.inf], np.nan)
+    model_output_df["hplot_layer"] = model_output_df["signed_distance_to_border_hops"]
+
+    # Backward-compatible aliases. These are graph-hop counts, not microns.
+    model_output_df["distance_to_border"] = model_output_df["distance_to_border_hops"]
+    model_output_df["signed_distance_to_border"] = model_output_df[
+        "signed_distance_to_border_hops"
+    ]
     return model_output_df
 
 
 def compute_hplot(df_with_distances, filtered_edges_df):
     """
-    Calculates the target ratio by cumulative average distance to the tumor border.
+    Calculates the target ratio by graph layer and cumulative micron distance to the tumor border.
 
     Args:
-        df_with_distances: DataFrame with 'signed_distance_to_border' and 'is_target' columns.
-        filtered_edges_df: DataFrame with 'source', 'target', and 'length' columns representing filtered edges.
+        df_with_distances: DataFrame with 'hplot_layer' (preferred) or the legacy
+            'signed_distance_to_border' hop column and target/base columns.
+        filtered_edges_df: DataFrame with 'source', 'target', and 'length' columns
+            representing filtered edges. For sptxinsight, lengths are in microns
+            because AnnData spatial coordinates are microns.
 
     Returns:
-        A pandas DataFrame with 'cumulative_avg_edge_length' and 'target_type_prop' columns,
-        sorted by cumulative_avg_edge_length, ready for plotting.
+        A pandas DataFrame with explicit 'layer' and 'distance_um' columns,
+        plus legacy 'distance' as a compatibility alias for 'distance_um'.
     """
-    # Group by signed_distance_to_border and calculate the ratio of targets
+    layer_col = (
+        "hplot_layer"
+        if "hplot_layer" in df_with_distances.columns
+        else "signed_distance_to_border"
+    )
+
+    # Group by graph-hop layer and calculate the ratio of targets
     # Handle potential empty groups or no targets at a distance
     # Exclude NaN distances from grouping
 
@@ -829,8 +846,8 @@ def compute_hplot(df_with_distances, filtered_edges_df):
     # base_type_count_by_distance = df_with_distances.dropna(subset=['signed_distance_to_border']).groupby('signed_distance_to_border')[f'is_base_type'].apply(lambda x: x.sum() if len(x) > 0 else 0)
     # target_type_count_by_distance = df_with_distances.dropna(subset=['signed_distance_to_border']).groupby('signed_distance_to_border')[f'is_target_type'].apply(lambda x: x.sum() if len(x) > 0 else 0)
 
-    valid_layers = df_with_distances.dropna(subset=["signed_distance_to_border"])
-    grouped_layers = valid_layers.groupby("signed_distance_to_border")
+    valid_layers = df_with_distances.dropna(subset=[layer_col])
+    grouped_layers = valid_layers.groupby(layer_col)
     # ``target_value`` carries the per-cell target quantity: a 0/1 cell-type
     # membership (cell-type mode) or a continuous gene-expression value (gene
     # mode). Averaging it per layer yields ``target_type_prop`` -- a proportion
@@ -863,21 +880,15 @@ def compute_hplot(df_with_distances, filtered_edges_df):
 
     # Step 1: Calculate average edge length between adjacent layers
     average_edge_length_between_layers = {}
-    unique_distances = sorted(
-        df_with_distances["signed_distance_to_border"].dropna().unique()
-    )
+    unique_distances = sorted(df_with_distances[layer_col].dropna().unique())
 
     for i in range(len(unique_distances) - 1):
         dist1 = unique_distances[i]
         dist2 = unique_distances[i + 1]
 
         # Identify cells in the two adjacent layers
-        cells_in_dist1 = df_with_distances[
-            df_with_distances["signed_distance_to_border"] == dist1
-        ].index
-        cells_in_dist2 = df_with_distances[
-            df_with_distances["signed_distance_to_border"] == dist2
-        ].index
+        cells_in_dist1 = df_with_distances[df_with_distances[layer_col] == dist1].index
+        cells_in_dist2 = df_with_distances[df_with_distances[layer_col] == dist2].index
 
         # Find edges connecting cells in dist1 to cells in dist2
         connecting_edges = filtered_edges_df[
@@ -964,10 +975,11 @@ def compute_hplot(df_with_distances, filtered_edges_df):
     )
 
     # Map the cumulative average edge lengths to the signed_distance in plot_df
-    plot_df["distance"] = plot_df["layer"].map(cumulative_avg_lengths_series)
+    plot_df["distance_um"] = plot_df["layer"].map(cumulative_avg_lengths_series)
+    plot_df["distance"] = plot_df["distance_um"]
 
     # Drop rows where we couldn't calculate the cumulative average edge length
-    plot_df = plot_df.dropna(subset=["distance"])
+    plot_df = plot_df.dropna(subset=["distance_um"])
 
     # Sort by the new x-axis values for a clear line plot
     plot_df = plot_df.sort_values("layer")

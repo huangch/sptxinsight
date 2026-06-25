@@ -231,6 +231,13 @@ results/
   hplot-outputs.csv              # aggregated, gap-filled layer table
 ```
 
+H-Plot distances follow the WSInsight contract: `layer` is the signed graph-hop
+index from the base-region border, while `distance_um` is the cumulative spatial
+distance in microns derived from Delaunay edge lengths. Per-cell H-Plot outputs
+also include explicit hop columns such as `hplot_layer` and
+`signed_distance_to_border_hops`; legacy `signed_distance_to_border` is kept as a
+backward-compatible hop-distance alias.
+
 ## License
 
 Apache License, Version 2.0.
