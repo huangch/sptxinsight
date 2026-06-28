@@ -42,19 +42,15 @@ def _make_nodes_df(centers: np.ndarray, labels: list[str], classes: list[str]):
     n = len(centers)
     df = pd.DataFrame(
         {
-            "minx": (centers[:, 0] - 2).astype(int),
-            "miny": (centers[:, 1] - 2).astype(int),
-            "width": np.full(n, 4, dtype=int),
-            "height": np.full(n, 4, dtype=int),
-            "cx": centers[:, 0],
-            "cy": centers[:, 1],
+            "center_x_um": centers[:, 0],
+            "center_y_um": centers[:, 1],
         }
     )
     for c in classes:
         df[f"prob_{c}"] = 0.05
     for i, lab in enumerate(labels):
         df.at[i, f"prob_{lab}"] = 0.9
-    return compute_cell_center_points(df)
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +72,7 @@ def test_two_separated_blobs_give_two_aggregates():
     df = _make_nodes_df(centers, labels, ["t_cell", "b_cell", "tumor"])
 
     edges_df = delaunay_triangulation(
-        df[["center_x", "center_y"]].to_numpy(), max_edge_length=25.0
+        df[["center_x_um", "center_y_um"]].to_numpy(), max_edge_length=25.0
     )
     agg_id = identify_aggregates(
         df,
@@ -99,7 +95,7 @@ def test_salt_and_pepper_yields_no_aggregate():
     df = _make_nodes_df(centers, labels, ["t_cell", "tumor"])
 
     edges_df = delaunay_triangulation(
-        df[["center_x", "center_y"]].to_numpy(), max_edge_length=25.0
+        df[["center_x_um", "center_y_um"]].to_numpy(), max_edge_length=25.0
     )
     agg_id = identify_aggregates(
         df,
@@ -118,7 +114,7 @@ def test_min_size_filter():
     c1, l1 = _grid_block(0, 0, 3, 5.0, "t_cell")
     df = _make_nodes_df(c1, l1, ["t_cell", "tumor"])
     edges_df = delaunay_triangulation(
-        df[["center_x", "center_y"]].to_numpy(), max_edge_length=25.0
+        df[["center_x_um", "center_y_um"]].to_numpy(), max_edge_length=25.0
     )
     agg_id = identify_aggregates(
         df,
@@ -178,7 +174,7 @@ def _build_results_dir(tmp_path: Path) -> Path:
     labels = l1 + l2 + ["tumor"] * len(bg)
     df = _make_nodes_df(centers, labels, ["t_cell", "b_cell", "tumor"])
     # Drop the helper-added center columns; the worker recomputes them.
-    df = df.drop(columns=["center_x", "center_y"])
+    df = df.drop(columns=["center_x_um", "center_y_um"])
 
     results_dir = tmp_path / "results"
     (results_dir / "model-outputs-csv").mkdir(parents=True)
@@ -226,7 +222,7 @@ def test_agg_end_to_end(tmp_path: Path):
     sdf = pd.read_csv(sidecar)
     assert len(sdf) == 2
     assert (sdf["prob_tls"] == 1.0).all()
-    assert {"center_x", "center_y", "n_cells", "area_um2"}.issubset(sdf.columns)
+    assert {"center_x_um", "center_y_um", "n_cells", "area_um2"}.issubset(sdf.columns)
 
     # 3. quotient graph subgroup written.
     cache = read_aggregate_cache(results_dir / "graphs" / "synthetic.h5", "tls")

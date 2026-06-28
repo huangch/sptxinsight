@@ -109,7 +109,9 @@ def _worker(
 
     df = compute_cell_center_points(df)
     predicted_labels = df[prob_columns].idxmax(axis=1)
-    centers = df[["center_x", "center_y"]].to_numpy()
+    _cx = "center_x_um" if "center_x_um" in df.columns else "center_x"
+    _cy = "center_y_um" if "center_y_um" in df.columns else "center_y"
+    centers = df[[_cx, _cy]].to_numpy()
 
     if graph_cache_dir is not None:
         edges_df = get_or_build_delaunay(

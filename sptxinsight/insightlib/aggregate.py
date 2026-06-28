@@ -198,7 +198,7 @@ def identify_aggregates(
     is_region = work["is_base_region"].to_numpy(dtype=bool)
 
     raw = _induced_region_components(is_region, edges_df, min_size)
-    centers = nodes_df[["center_x", "center_y"]].to_numpy()
+    centers = nodes_df[["center_x_um", "center_y_um"]].to_numpy()
     return _relabel_by_centroid(raw, centers)
 
 
@@ -325,7 +325,7 @@ def aggregate_features(
         predicted_labels = predicted_labels.astype(str).str.removeprefix("prob_")
 
     all_types = sorted(predicted_labels.unique().tolist())
-    centers = nodes_df[["center_x", "center_y"]].to_numpy(dtype=np.float64)
+    centers = nodes_df[["center_x_um", "center_y_um"]].to_numpy(dtype=np.float64)
     labels_arr = predicted_labels.to_numpy()
     mpp2 = float(mpp) * float(mpp)
 
@@ -342,8 +342,8 @@ def aggregate_features(
             "slide_id": slide_id,
             "n_cells": n,
             "area_um2": _convex_hull_area_px2(pts) * mpp2,
-            "center_x": int(round(cx)),
-            "center_y": int(round(cy)),
+            "center_x_um": int(round(cx)),
+            "center_y_um": int(round(cy)),
         }
         member_labels = labels_arr[mask]
         for t in all_types:
@@ -355,7 +355,7 @@ def aggregate_features(
         "slide_id",
         "n_cells",
         "area_um2",
-        "center_x",
-        "center_y",
+        "center_x_um",
+        "center_y_um",
     ] + [f"composition_{t}_frac" for t in all_types]
     return pd.DataFrame(rows, columns=columns)

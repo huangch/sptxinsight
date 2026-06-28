@@ -41,6 +41,7 @@ classifiers = [
 dependencies = [
   "click>=8.0,<9,!=8.1.4,!=8.1.5",
   "anndata",
+  "scanpy",
   "numpy<2.0.0",
   "pandas>=2.0",
   "scipy>=1.10",
@@ -53,7 +54,7 @@ dependencies = [
   "torch",
   "torch_geometric",
   "scikit-learn",
-  "python-igraph",
+  "igraph",
   "leidenalg",
   "joblib",
   "geopandas",
@@ -82,7 +83,9 @@ spatialdata = [
   "spatialdata",
 ]
 scanpy = [
-  "scanpy",
+  # scanpy is now a core dependency; this extra is kept for backward
+  # compatibility so existing `pip install sptxinsight[scanpy]` commands
+  # continue to work without error.
 ]
 mcp = [
   "fastmcp>=2.0",

@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # conda-setup.sh — create and populate the standalone sptxinsight conda environment.
 #
-# Usage:  sh ./conda-setup.sh          (from /workspace/wsinsight/sptxinsight/)
+# Usage:  sh ./conda-setup.sh [-n ENV_NAME] [-r|--reset]
+#
+#   -n | --name  ENV_NAME   Conda environment to use (default: current active env).
+#   -r | --reset            Deactivate, remove, recreate, and activate the env.
+#                           Without this flag the script skips env creation and
+#                           only (re-)installs packages into the existing env.
 #
 # NOTE: sptxinsight is also co-installable inside the shared wsinsight env
 # via:  conda activate wsinsight && pip install --no-deps -e .
@@ -15,14 +20,51 @@ set -e   # abort on first error
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# ── Reset environment ─────────────────────────────────────────────────────────
-source /opt/anaconda3/etc/profile.d/conda.sh
-conda deactivate
-conda env remove -n sptxinsight -y 2>/dev/null || true
+# ── Argument parsing ──────────────────────────────────────────────────────────
+ENV_NAME="${CONDA_DEFAULT_ENV:-}"   # default = current active env
+DO_RESET=0
 
-# Python only — sptxinsight uses geopandas via pip+pyogrio (no GDAL binary needed).
-conda create -n sptxinsight python=3.11 "setuptools<67" -c conda-forge -y
-conda activate sptxinsight
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -n|--name)
+            if [[ -z "${2:-}" ]]; then
+                echo "Error: -n/--name requires an environment name." >&2
+                exit 1
+            fi
+            ENV_NAME="$2"
+            shift 2
+            ;;
+        -r|--reset)
+            DO_RESET=1
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            echo "Usage: sh ./conda-setup.sh [-n ENV_NAME] [-r|--reset]" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "$ENV_NAME" ]]; then
+    echo "Error: no conda environment specified and no environment is currently active." >&2
+    echo "       Use -n ENV_NAME to specify one." >&2
+    exit 1
+fi
+
+echo "Target conda environment: ${ENV_NAME}  (reset=${DO_RESET})"
+
+# ── (Re-)create environment ───────────────────────────────────────────────────
+source /opt/anaconda3/etc/profile.d/conda.sh
+
+if [[ "$DO_RESET" -eq 1 ]]; then
+    conda deactivate
+    conda env remove -n "${ENV_NAME}" -y 2>/dev/null || true
+    # Python only — sptxinsight uses geopandas via pip+pyogrio (no GDAL binary needed).
+    conda create -n "${ENV_NAME}" python=3.11 "setuptools<67" -c conda-forge -y
+fi
+
+conda activate "${ENV_NAME}"
 pip install --upgrade pip
 
 # ── Pip cache fix (NAS inode quota) ──────────────────────────────────────────
@@ -37,14 +79,14 @@ pip install torch torchvision torch-geometric
 
 # ── Core scientific / bioinformatics stack ────────────────────────────────────
 pip install scipy pandas h5py tqdm click
-pip install anndata "zarr<3"          # zarr<3 keeps anndata compat with wsinsight
+pip install anndata scanpy "zarr<3"   # zarr<3 keeps anndata compat with wsinsight
 pip install scikit-learn joblib
 
 # ── Geometry / GIS — pyogrio as OGR backend (no GDAL binary required) ─────────
 pip install pyogrio shapely geopandas
 
 # ── Graph clustering ──────────────────────────────────────────────────────────
-pip install python-igraph leidenalg
+pip install igraph leidenalg
 
 # ── Cloud I/O (version-capped to stay compatible with wsinsight's zarr<3 stack)
 # Pre-install aiobotocore + boto3 with explicit compatible versions to avoid

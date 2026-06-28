@@ -47,7 +47,10 @@ from ._common import enumerate_sample_uris
 )
 def annotate(*, sptx_dir: URIPath, cell_type_key: str, verbose: int) -> None:
     """Verify each sample is cell-typed and report per-type counts."""
-    samples = enumerate_sample_uris(sptx_dir)
+    try:
+        samples = enumerate_sample_uris(sptx_dir)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from None
     if not samples:
         raise click.ClickException(f"No .h5ad/.zarr samples found under {sptx_dir}")
 

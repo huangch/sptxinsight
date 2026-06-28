@@ -51,7 +51,10 @@ def ingest(
 ) -> None:
     """Read spatial samples and write the per-sample H-Plot CSV contract."""
     results_dir.mkdir(parents=True, exist_ok=True)
-    samples = enumerate_sample_uris(sptx_dir)
+    try:
+        samples = enumerate_sample_uris(sptx_dir)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from None
     if not samples:
         raise click.ClickException(f"No .h5ad/.zarr samples found under {sptx_dir}")
 

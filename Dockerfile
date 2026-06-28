@@ -60,13 +60,15 @@ RUN pip install --retries 10 "numpy<2" torch torchvision torch_geometric
 
 # ------------------------------------
 # Install sptxinsight with MCP server, zarr (zarr<3) and harmony extras.
-# NOTE: the spatialdata / scanpy extras are intentionally omitted — they
-# require numpy>=2 / zarr>=3 which conflict with the numpy<2 stack above.
-# The default anndata backend + zarr<3 covers ingest / annotate / cme / hplot.
+# NOTE: scanpy is a core sptxinsight dependency but versions ≥1.11 require
+# numpy>=2, which conflicts with the numpy<2 stack here.  Pin scanpy to a
+# numpy<2-compatible release and pin numpy<2 after to prevent pip from
+# upgrading it during dependency resolution.
 # ------------------------------------
 WORKDIR /app/sptxinsight
 COPY . .
-RUN pip install --retries 10 "numpy<2" ".[mcp,zarr,harmony]"
+RUN pip install --retries 10 "scanpy<1.11" "numpy<2" ".[mcp,zarr,harmony]" && \
+    pip install --retries 10 "numpy<2"
 
 # ------------------------------------
 # Sanity check (build-time)

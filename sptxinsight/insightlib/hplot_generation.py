@@ -366,7 +366,7 @@ def _worker(
     nodes_df = compute_cell_center_points(nodes_df)
     _step("cell centers")
 
-    centers = nodes_df[["center_x", "center_y"]].values
+    centers = nodes_df[["center_x_um", "center_y_um"]].values
     if graph_cache_dir is not None:
         edges_df = get_or_build_delaunay(
             graph_cache_dir, slide_id, centers, mpp, max_neighbor_distance_px
@@ -516,7 +516,6 @@ def hplot_finalize(output_dir: URIPath, overwrite: bool = False) -> None:
         "base_count",
         "all_count",
         "distance_um",
-        "distance",
     ]
 
     hplot_frames: list[pd.DataFrame] = []
@@ -539,15 +538,12 @@ def hplot_finalize(output_dir: URIPath, overwrite: bool = False) -> None:
                 "base_type_count",
                 "all_type_count",
                 "distance_um",
-                "distance",
             ]
             if c in df.columns
         ]
         df = df[src_cols].copy()
         if "distance_um" not in df.columns and "distance" in df.columns:
             df["distance_um"] = df["distance"]
-        if "distance" not in df.columns and "distance_um" in df.columns:
-            df["distance"] = df["distance_um"]
         df.rename(columns=_COL_RENAME, inplace=True)
 
         # Gap-fill: ensure every integer layer in [min, max] has a row
@@ -566,7 +562,6 @@ def hplot_finalize(output_dir: URIPath, overwrite: bool = False) -> None:
                     "base_count": entry.get("base_count", np.nan),
                     "all_count": entry.get("all_count", np.nan),
                     "distance_um": entry.get("distance_um", np.nan),
-                    "distance": entry.get("distance", np.nan),
                 }
             )
         hplot_frames.append(pd.DataFrame(rows, columns=_COL_ORDER))

@@ -20,13 +20,21 @@ def compute_cell_center_points(model_output_df):
     Computes cell center points
 
     Args:
-        model_output_df: DataFrame with 'minx', 'miny', 'width', 'height' columns.
+        model_output_df: DataFrame with either 'center_x_um'/'center_y_um' (µm,
+            sptxinsight/AnnData path) or 'minx', 'miny', 'width', 'height' columns
+            (pixel path, wsinsight/WSI).
 
     Returns:
         A tuple containing:
         - The DataFrame with 'center_x' and 'center_y' columns added.
     """
-    # Calculate cell center points if not already present
+    # µm coord path (sptxinsight / AnnData): coords already present under _um names
+    if (
+        "center_x_um" in model_output_df.columns
+        and "center_y_um" in model_output_df.columns
+    ):
+        return model_output_df
+    # pixel coord path (wsinsight / WSI): compute from bounding box
     if (
         "center_x" not in model_output_df.columns
         or "center_y" not in model_output_df.columns

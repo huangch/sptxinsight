@@ -17,7 +17,7 @@ Differences from the WSInsight original:
   nested inside an outer one.
 
 Heavy dependencies (``torch``, ``torch_geometric``, ``scikit-learn``,
-``python-igraph``, ``leidenalg``) are imported at module load, so this module is
+``igraph``, ``leidenalg``) are imported at module load, so this module is
 only imported lazily from the ``cme`` CLI command. The annotation-level region
 merge additionally needs ``geopandas``/``shapely`` and is imported on demand.
 """

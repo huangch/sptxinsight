@@ -4,7 +4,7 @@ The vendored :func:`sptxinsight.insightlib.hplot_generation.hplot_generation`
 reads one CSV per sample from ``<results_dir>/model-outputs-csv/<slide_id>.csv``
 with:
 
-- ``center_x`` / ``center_y``: cell-center coordinates **in microns**,
+- ``center_x_um`` / ``center_y_um``: cell-center coordinates **in microns**,
 - ``prob_<type>`` columns: per-cell soft membership; the engine takes ``idxmax``
   to get the hard label at runtime, and
 - ``expr_<gene>`` columns (optional): per-cell expression of selected genes,
@@ -158,7 +158,7 @@ def anndata_to_contract(
             f"adata.obsm[{spatial_key!r}] must be N x 2 (got shape {xy.shape})."
         )
 
-    df = pd.DataFrame({"center_x": xy[:, 0], "center_y": xy[:, 1]})
+    df = pd.DataFrame({"center_x_um": xy[:, 0], "center_y_um": xy[:, 1]})
 
     labels = adata.obs[cell_type_key].astype(str).to_numpy()
     onehot = pd.get_dummies(labels).astype(float)

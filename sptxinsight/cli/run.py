@@ -172,7 +172,10 @@ def run(
 ) -> None:
     """Ingest spatial samples and compute aggregated H-Plot outputs."""
     results_dir.mkdir(parents=True, exist_ok=True)
-    samples = enumerate_sample_uris(sptx_dir)
+    try:
+        samples = enumerate_sample_uris(sptx_dir)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from None
     if not samples:
         raise click.ClickException(f"No .h5ad/.zarr samples found under {sptx_dir}")
 

@@ -206,7 +206,9 @@ def score_sample(
     """
     df = compute_cell_center_points(df.copy())
     n = len(df)
-    centers = df[["center_x", "center_y"]].to_numpy(dtype=np.float32)
+    _cx = "center_x_um" if "center_x_um" in df.columns else "center_x"
+    _cy = "center_y_um" if "center_y_um" in df.columns else "center_y"
+    centers = df[[_cx, _cy]].to_numpy(dtype=np.float32)
 
     max_edge_len_px = float(d_max_um) / float(mpp_um_per_px)
     lam_px = float(lam_um) / float(mpp_um_per_px)
@@ -237,7 +239,7 @@ def score_sample(
     else:
         E = NS = NM = np.zeros((n, 0))
 
-    out = {"center_x": df["center_x"].to_numpy(), "center_y": df["center_y"].to_numpy()}
+    out = {"center_x_um": df[_cx].to_numpy(), "center_y_um": df[_cy].to_numpy()}
     for c in df.columns:
         if c.startswith("prob_"):
             out[c] = df[c].to_numpy()
