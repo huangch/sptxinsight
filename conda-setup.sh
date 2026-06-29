@@ -12,9 +12,12 @@
 # via:  conda activate wsinsight && pip install --no-deps -e .
 # This script creates a *separate* sptxinsight environment instead.
 #
-# NOTE: scanpy / spatialdata extras require numpy>=2 and are INCOMPATIBLE with
-# this environment (pinned numpy<2 by pyproject.toml). Install those extras
-# only in a dedicated numpy-2 environment.
+# NOTE: spatialdata / squidpy require numpy>=2 and are INCOMPATIBLE with this
+# environment (pinned numpy<2 by pyproject.toml). scanpy/anndata ARE installed
+# here, but pinned to the last numpy<2-compatible line: anndata>=0.12,<0.13 and
+# scanpy<1.11. anndata 0.12 is required to read 0.12-format `annotated.h5ad`
+# (older anndata raises IORegistryError on encoding_type='null'); newer scanpy
+# (>=1.11) drags in numpy>=2. Do NOT relax these pins.
 
 set -e   # abort on first error
 
@@ -79,7 +82,10 @@ pip install torch torchvision torch-geometric
 
 # ── Core scientific / bioinformatics stack ────────────────────────────────────
 pip install scipy pandas h5py tqdm click
-pip install anndata scanpy "zarr<3"   # zarr<3 keeps anndata compat with wsinsight
+# Pin anndata/scanpy to the last numpy<2-compatible line. anndata>=0.12 reads
+# the 0.12-format h5ad written by wsinsight; scanpy<1.11 avoids the numpy>=2
+# requirement. zarr<3 keeps anndata zarr-readers compatible with wsinsight.
+pip install "anndata>=0.12,<0.13" "scanpy<1.11" "zarr<3"
 pip install scikit-learn joblib
 
 # ── Geometry / GIS — pyogrio as OGR backend (no GDAL binary required) ─────────
@@ -106,7 +112,13 @@ pip install -e "${SCRIPT_DIR}"
 python -c "
 import numpy; v = numpy.__version__
 assert int(v.split('.')[0]) < 2, f'ERROR: numpy {v} >= 2.0; re-run: pip install \"numpy<2\"'
-print(f'numpy {v} OK')
+import importlib.metadata as m
+from packaging.version import Version
+ad = m.version('anndata'); sp = m.version('scanpy')
+assert Version(ad) >= Version('0.12'), f'ERROR: anndata {ad} < 0.12 cannot read 0.12-format h5ad'
+assert Version(sp) < Version('1.11'), f'ERROR: scanpy {sp} >= 1.11 requires numpy>=2'
+import scanpy  # import must succeed
+print(f'numpy {v} | anndata {ad} | scanpy {sp} OK')
 "
 
 # ── Smoke test ────────────────────────────────────────────────────────────────

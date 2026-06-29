@@ -40,8 +40,10 @@ classifiers = [
 # prefer:  pip install --no-deps -e .   (every runtime dep is already present).
 dependencies = [
   "click>=8.0,<9,!=8.1.4,!=8.1.5",
-  "anndata",
-  "scanpy",
+  # anndata>=0.12 is required to read 0.12-format annotated.h5ad (older versions
+  # raise IORegistryError on encoding_type='null'); scanpy<1.11 keeps numpy<2.
+  "anndata>=0.12,<0.13",
+  "scanpy<1.11",
   "numpy<2.0.0",
   "pandas>=2.0",
   "scipy>=1.10",
@@ -76,9 +78,9 @@ dynamic = ["version"]
 zarr = [
   "zarr<3",
 ]
-# WARNING: spatialdata / squidpy / scanpy require numpy>=2 and zarr>=3, which
-# are INCOMPATIBLE with the shared wsinsight env (numpy<2, zarr<3). Install
-# these extras only in a dedicated sptxinsight-only environment.
+# WARNING: spatialdata / squidpy require numpy>=2 and zarr>=3, which are
+# INCOMPATIBLE with the shared wsinsight env (numpy<2, zarr<3). Install these
+# extras only in a dedicated numpy-2 environment.
 spatialdata = [
   "spatialdata",
 ]
