@@ -53,7 +53,12 @@ pip install --no-deps -e .
 
 Optional extras: `zarr` (read `.zarr` in the shared env), `spatialdata` /
 `scanpy` (dedicated `numpy>=2` env), `mcp` (`fastmcp>=2.0` MCP server),
-`harmony` (`harmonypy`, for `--cme-batch-correct harmony`).
+`kurtorank` (enables KurtoRank-backed annotation such as `annotate`), `harmony`
+(`harmonypy`, for `--cme-batch-correct harmony`).
+
+For wsinsight-compatible installs, prefer one-shot resolution via
+`pip install -e '.[kurtorank]'` from the sptxinsight repo. This keeps
+`numpy<2`/`zarr<3` and the spatial stack on known-compatible versions.
 
 ---
 
@@ -70,7 +75,10 @@ selects the sample loader; `--log-level` sets verbosity.
 |---|---|
 | `run` | Ingest → adapt → H-Plot, end to end. |
 | `ingest` | Read samples and write the per-sample H-Plot CSV contract. |
-| `annotate` | Verify samples are cell-typed and report per-type counts. |
+| `annotate` | Run KurtoRank cell-type annotation (Xenium dirs and AnnData inputs). Requires `sptxinsight[kurtorank]`; hidden otherwise. |
+| `marker-init` | Build a skeleton marker panel from DISCO atlases (KurtoRank wrapper). Requires `sptxinsight[kurtorank]`; hidden otherwise. |
+| `marker-rerank` | Rerank marker genes against CELLxGENE Census (KurtoRank wrapper). Requires `sptxinsight[kurtorank]`; hidden otherwise. |
+| `verify` | Verify samples are cell-typed and report per-type counts. |
 | `export` | Print the path to the aggregated H-Plot table. |
 | `describe` | Emit a JSON schema of every subcommand (for tooling / MCP). |
 | `cme` | Discover cellular microenvironments (niches) across ingested samples. |

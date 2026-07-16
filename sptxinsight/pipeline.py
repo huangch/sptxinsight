@@ -13,6 +13,7 @@ image is ever opened.
 
 from __future__ import annotations
 
+from collections import Counter
 import logging
 from typing import List
 from typing import Sequence
@@ -24,6 +25,13 @@ from .io import read_sample
 from .uri_path import URIPath
 
 _logger = logging.getLogger(__name__)
+
+
+def _suggest_obs_keys(obs_columns: list[str]) -> list[str]:
+    """Return likely cell-type annotation columns from ``adata.obs``."""
+    tokens = ("cell", "type", "annot", "class", "label", "cluster")
+    hits = [c for c in obs_columns if any(t in str(c).lower() for t in tokens)]
+    return sorted(hits)
 
 
 def adapt_samples(
@@ -50,11 +58,44 @@ def adapt_samples(
     mpp_lookup: dict[str, float] = {}
     vocab: set[str] = set()
 
-    for uri in sample_uris:
-        upath = uri if isinstance(uri, URIPath) else URIPath(str(uri))
+    # Guard against silent output collisions (e.g. many "annotated.h5ad" stems).
+    normalized: list[URIPath] = [
+        uri if isinstance(uri, URIPath) else URIPath(str(uri)) for uri in sample_uris
+    ]
+    id_counts = Counter(u.sample_id for u in normalized)
+    dup_ids = sorted([sid for sid, n in id_counts.items() if n > 1])
+    if dup_ids:
+        raise ValueError(
+            "Duplicate sample ids detected in input list: "
+            f"{dup_ids}. Use sptx-list:///... with an explicit 2nd "
+            "TAB/comma-separated sample-id column to make ids unique."
+        )
+
+    for upath in normalized:
         slide_id = upath.sample_id
         _logger.info("Ingesting sample %s", slide_id)
         adata = read_sample(upath)
+
+        if spatial_key not in adata.obsm:
+            raise KeyError(
+                f"Sample '{slide_id}' is missing adata.obsm['{spatial_key}']. "
+                f"Available obsm keys: {sorted(list(adata.obsm.keys()))}."
+            )
+        if cell_type_key not in adata.obs:
+            obs_cols = [str(c) for c in adata.obs.columns]
+            examples = _suggest_obs_keys(obs_cols)
+            hint = (
+                f" Candidate columns: {examples}."
+                if examples
+                else f" Available obs columns (first 30): {obs_cols[:30]}."
+            )
+            raise KeyError(
+                f"Sample '{slide_id}' is missing adata.obs['{cell_type_key}']; "
+                "sample must be cell-typed."
+                + hint
+                + " Pass --cell-type-key <column> or add/rename the column in the input AnnData."
+            )
+
         types = anndata_to_contract(
             adata,
             slide_id,

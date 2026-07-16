@@ -16,7 +16,17 @@ from typing import Any
 # sptxinsight/cli/cli.py (experimental commands are hidden unless the
 # SPTXINSIGHT_EXPERIMENTAL env var is set).
 STABLE_COMMANDS: frozenset[str] = frozenset(
-    {"run", "ingest", "annotate", "export", "cme", "cme-profile"}
+    {
+        "run",
+        "ingest",
+        "annotate",
+        "marker-init",
+        "marker-rerank",
+        "verify",
+        "export",
+        "cme",
+        "cme-profile",
+    }
 )
 EXPERIMENTAL_COMMANDS: frozenset[str] = frozenset(
     {"hplot", "hplot-finalize", "cci", "agg"}
@@ -27,7 +37,18 @@ EXPERIMENTAL_COMMANDS: frozenset[str] = frozenset(
 # agent polls job_status / job_logs / cancel_job). All other stable commands
 # run synchronously.
 LONG_RUNNING_COMMANDS: frozenset[str] = frozenset(
-    {"run", "ingest", "annotate", "cme", "hplot", "cci", "agg"}
+    {
+        "run",
+        "ingest",
+        "annotate",
+        "marker-init",
+        "marker-rerank",
+        "verify",
+        "cme",
+        "hplot",
+        "cci",
+        "agg",
+    }
 )
 
 _KIND_TO_JSON_TYPE: dict[str, str] = {

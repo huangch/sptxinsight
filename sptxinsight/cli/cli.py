@@ -1,7 +1,8 @@
-"""Top-level Click group wiring sptxinsight's ingest, annotate, and run commands."""
+"""Top-level Click group wiring sptxinsight's ingest, annotate, verify, and run commands."""
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import os
@@ -13,7 +14,6 @@ import click
 
 from ..io import set_backend
 from .agg import agg
-from .annotate import annotate
 from .cci import cci
 from .cme import cme
 from .cme import cme_profile_cmd
@@ -22,6 +22,7 @@ from .hplot import hplot
 from .hplot import hplot_finalize_cmd
 from .ingest import ingest
 from .run import run
+from .verify import verify
 
 _logging_levels = ["debug", "info", "warning", "error", "critical"]
 
@@ -33,6 +34,11 @@ _EXPERIMENTAL_COMMANDS = ("hplot", "hplot-finalize", "cci", "agg")
 def _experimental_enabled() -> bool:
     v = os.environ.get("SPTXINSIGHT_EXPERIMENTAL", "").strip().lower()
     return v in {"1", "true", "yes", "on"}
+
+
+def _kurtorank_enabled() -> bool:
+    """Return True when optional KurtoRank extras are importable."""
+    return importlib.util.find_spec("kurtorank") is not None
 
 
 @click.group()
@@ -73,7 +79,15 @@ def cli(
 
 cli.add_command(run)
 cli.add_command(ingest)
-cli.add_command(annotate)
+if _kurtorank_enabled():
+    from .annotate import annotate
+    from .marker_init import marker_init
+    from .marker_rerank import marker_rerank
+
+    cli.add_command(annotate)
+    cli.add_command(marker_init)
+    cli.add_command(marker_rerank)
+cli.add_command(verify)
 cli.add_command(export)
 cli.add_command(hplot)
 cli.add_command(hplot_finalize_cmd)

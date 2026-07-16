@@ -28,6 +28,7 @@ Quick start
 .. code-block:: bash
 
    pip install -e .                    # standalone
+   pip install -e '.[kurtorank]'       # optional: enable `annotate`
    # or, inside the shared wsinsight conda env:
    pip install --no-deps -e .
 

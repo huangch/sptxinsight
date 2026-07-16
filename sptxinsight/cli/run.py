@@ -179,27 +179,32 @@ def run(
     if not samples:
         raise click.ClickException(f"No .h5ad/.zarr samples found under {sptx_dir}")
 
-    failed = run_hplot(
-        samples,
-        results_dir,
-        base_types,
-        target_types,
-        cell_type_key=cell_type_key,
-        spatial_key=spatial_key,
-        base_by=base_type_by,
-        target_by=target_type_by,
-        expression_matrix=expression_matrix,
-        base_gene_threshold=base_gene_threshold,
-        max_neighbor_distance_um=hplot_max_neighbor_distance,
-        hplot_k=hplot_k,
-        hplot_N=hplot_n,
-        hplot_R=hplot_r,
-        hplot_range_max=hplot_range_max,
-        hplot_range_min=hplot_range_min,
-        samples_with_valid_range_only=hplot_samples_with_valid_range_only,
-        num_workers=num_workers,
-        overwrite=overwrite,
-    )
+    try:
+        failed = run_hplot(
+            samples,
+            results_dir,
+            base_types,
+            target_types,
+            cell_type_key=cell_type_key,
+            spatial_key=spatial_key,
+            base_by=base_type_by,
+            target_by=target_type_by,
+            expression_matrix=expression_matrix,
+            base_gene_threshold=base_gene_threshold,
+            max_neighbor_distance_um=hplot_max_neighbor_distance,
+            hplot_k=hplot_k,
+            hplot_N=hplot_n,
+            hplot_R=hplot_r,
+            hplot_range_max=hplot_range_max,
+            hplot_range_min=hplot_range_min,
+            samples_with_valid_range_only=hplot_samples_with_valid_range_only,
+            num_workers=num_workers,
+            overwrite=overwrite,
+        )
+    except (KeyError, ValueError, FileNotFoundError) as exc:
+        message = exc.args[0] if exc.args else str(exc)
+        raise click.ClickException(str(message)) from None
+
     ok = len(samples) - len(failed)
     msg = f"H-Plot complete: {ok}/{len(samples)} sample(s); wrote {results_dir / 'hplot-outputs.csv'}"
     if failed:

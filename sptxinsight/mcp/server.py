@@ -1,7 +1,7 @@
 """FastMCP server exposing sptxinsight subcommands as MCP tools.
 
 Tools are auto-registered from the live CLI schema. Long-running commands
-(``run``, ``ingest``, ``annotate``, ``cme`` …) return a ``job_id`` immediately
+(``run``, ``ingest``, ``verify``, ``cme`` …) return a ``job_id`` immediately
 and the agent polls ``job_status`` / ``job_logs`` / ``cancel_job``. Short
 commands (``export``, ``cme-profile``) run synchronously and return the
 subprocess exit code plus a tail of its stdout/stderr.
@@ -310,21 +310,28 @@ def build_server(
         name="cell_typing_to_niches",
         description=(
             "Walk through a spatial-transcriptomics analysis end-to-end "
-            "(ingest -> annotate -> cme niche discovery) using the sptxinsight "
+            "(ingest -> annotate -> verify -> cme niche discovery) using the sptxinsight "
             "tools exposed by this server."
         ),
     )
     def cell_typing_to_niches() -> str:
+        has_annotate = "annotate" in discover_commands(experimental=experimental)
+        annotate_step = (
+            "2. Call `annotate` (long-running) to run KurtoRank cell-type annotation.\n"
+            if has_annotate
+            else "2. If your inputs are not already cell-typed, install sptxinsight with the optional KurtoRank extra (`pip install 'sptxinsight[kurtorank]'`) and rerun the server to enable `annotate`.\n"
+        )
         return (
             "You are an analyst running a spatial-transcriptomics pipeline with "
             "sptxinsight. Use the tools exposed by this MCP server to:\n"
             "1. Call `ingest` (long-running) to load the spatial samples into "
             "per-cell CSVs under the results directory.\n"
-            "2. Call `annotate` (long-running) to assign cell types.\n"
-            "3. Call `cme` (long-running) to discover cellular-microenvironment "
+            f"{annotate_step}"
+            "3. Call `verify` (long-running) to validate the produced labels.\n"
+            "4. Call `cme` (long-running) to discover cellular-microenvironment "
             "niches; poll `job_status` until done.\n"
-            "4. Call `export` to write the niche / composition tables.\n"
-            "5. Read the `sptxinsight://results/<results-dir>/layout` resource to "
+            "5. Call `export` to write the niche / composition tables.\n"
+            "6. Read the `sptxinsight://results/<results-dir>/layout` resource to "
             "confirm the expected outputs were produced.\n"
             "Use job_logs to surface progress; cancel with cancel_job if asked."
         )

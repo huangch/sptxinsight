@@ -92,6 +92,18 @@ scanpy = [
 mcp = [
   "fastmcp>=2.0",
 ]
+# Optional KurtoRank-powered annotation / marker-prep commands.
+kurtorank = [
+  "kurtorank>=3.1.0",
+  "numpy<2.0.0",
+  "zarr<3",
+  "squidpy<1.7",
+  "spatialdata<0.5",
+  "spatialdata-io<0.7",
+  "xarray<2025",
+  "dask>=2024.10.0,<=2024.11.2",
+  "distributed>=2024.10.0,<=2024.11.2",
+]
 # Cross-sample batch correction of CME embeddings (sptxinsight cme
 # --cme-batch-correct harmony). Pure-Python; the 'center' method needs no extra.
 harmony = [

@@ -38,6 +38,7 @@ Optional extras (see `pyproject.toml` for compatibility caveats):
 | `spatialdata` | `spatialdata` | Needs `numpy>=2`/`zarr>=3` — dedicated env only. |
 | `scanpy` | `scanpy` | Same `numpy>=2` constraint. |
 | `mcp` | `fastmcp>=2.0` | Model Context Protocol server. |
+| `kurtorank` | `kurtorank>=3.1.0` | Enables KurtoRank-backed annotation command(s), such as `annotate`. |
 
 ## CLI
 
@@ -52,13 +53,27 @@ selects the sample loader and `--log-level` sets logging verbosity.
 |---|---|
 | `run` | Ingest → adapt → H-Plot, end to end. |
 | `ingest` | Read samples and write the per-sample H-Plot CSV contract. |
-| `annotate` | Verify samples are cell-typed and report per-type counts. |
+| `annotate` | Run KurtoRank cell-type annotation (Xenium dirs and AnnData inputs). Requires installing `sptxinsight[kurtorank]`; hidden otherwise. |
+| `marker-init` | Build a skeleton marker panel from DISCO atlases (KurtoRank wrapper). Requires installing `sptxinsight[kurtorank]`; hidden otherwise. |
+| `marker-rerank` | Rerank marker genes against CELLxGENE Census (KurtoRank wrapper). Requires installing `sptxinsight[kurtorank]`; hidden otherwise. |
+| `verify` | Verify samples are cell-typed and report per-type counts. |
 | `export` | Print the path to the aggregated H-Plot table. |
 | `describe` | Emit a JSON schema of every subcommand (for tooling / MCP). |
 | `cme` | Discover cellular microenvironments (niches) across ingested samples. |
 | `cme-profile` | Summarise each CME's cell composition and marker genes to help name niches. |
 | `hplot`, `hplot-finalize` | Experimental: run/aggregate H-Plot over ingested CSVs. Hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
 | `agg` | Experimental: detect density-gated cell-type aggregates (e.g. TLS from T+B cells), namespaced by `--agg-name`; usable as `hplot --target-by aggregate`. Hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
+
+Install with KurtoRank features enabled:
+
+```bash
+pip install -e '.[kurtorank]'
+```
+
+For wsinsight compatibility, install via the command above (single resolver
+pass) instead of installing `kurtorank` standalone first. The extra pins
+`numpy<2` and the spatial stack (`zarr<3`, `spatialdata/squidpy` caps) so the
+environment remains co-installable with wsinsight.
 
 ### Example
 
