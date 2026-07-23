@@ -198,6 +198,19 @@ class URIPath:
             )
         return self
 
+    def coerce_image_list(self) -> "URIPath":
+        """Back-compat alias of :meth:`coerce_sample_list` for the whole-slide-image
+        (``--wsi-dir``) callers inherited from WSInsight. Same validation, but the
+        error message uses WSI/slide terminology and the ``image-list://`` scheme.
+        """
+        if self.is_local and self._path.is_file():
+            raise ValueError(
+                f"--wsi-dir points at a regular file ({self.uri}). To process "
+                "a list of slides, pass it as 'image-list:///path/to/filelist.txt'. "
+                "Otherwise point --wsi-dir at a directory."
+            )
+        return self
+
     # ------------------------ Path-ish ------------------------
     def __str__(self) -> str:
         return self.uri
