@@ -79,13 +79,13 @@ environment remains co-installable with wsinsight.
 
 ```bash
 sptxinsight run \
-  -i ./samples \                      # dir of .h5ad, or sptx-list:///list.txt
+  -s ./samples \                      # dir of .h5ad, or sptx-list:///list.txt
   -o ./results \                      # local dir or s3://bucket/prefix
   --base-type tumor --target-type lymphocyte
 ```
 
 Input requirements per sample: `adata.obsm["spatial"]` (N×2 micron coordinates)
-and a categorical `adata.obs["cell_type"]`. Cloud `-i`/`-o` (`s3://`, `gs://`)
+and a categorical `adata.obs["cell_type"]`. Cloud `-s`/`-o` (`s3://`, `gs://`)
 use the same `S3_STORAGE_OPTIONS` / `GS_STORAGE_OPTIONS` env JSON and
 `SPTXINSIGHT_REMOTE_CACHE_DIR` as the URIPath layer.
 
@@ -104,7 +104,7 @@ otherwise the id defaults to the file stem.
 ```
 
 ```bash
-sptxinsight run -i sptx-list:///data/manifest.txt -o ./results \
+sptxinsight run -s sptx-list:///data/manifest.txt -o ./results \
   --base-type tumor --target-type lymphocyte
 ```
 

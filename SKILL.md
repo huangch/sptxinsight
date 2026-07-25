@@ -90,7 +90,7 @@ Typical end-to-end run:
 
 ```bash
 sptxinsight run \
-  -i ./samples \                      # dir of .h5ad, or sptx-list:///list.txt
+  -s ./samples \                      # dir of .h5ad, or sptx-list:///list.txt
   -o ./results \                      # local dir or s3://bucket/prefix
   --base-type tumor --target-type lymphocyte
 ```

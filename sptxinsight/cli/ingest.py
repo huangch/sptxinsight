@@ -14,7 +14,7 @@ from ._common import enumerate_sample_uris
 
 @click.command()
 @click.option(
-    "-i",
+    "-s",
     "--sptx-dir",
     type=URIPathType(exists=True, **_STORAGE_KWARGS),
     required=True,

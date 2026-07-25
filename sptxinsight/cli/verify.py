@@ -32,7 +32,7 @@ def _suggest_obs_keys(obs_columns: list[str]) -> list[str]:
 
 @click.command(name="verify")
 @click.option(
-    "-i",
+    "-s",
     "--sptx-dir",
     type=URIPathType(exists=True, **_STORAGE_KWARGS),
     required=True,
