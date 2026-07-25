@@ -17,7 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # (libgdal for geopandas/shapely region merge; the rest are common wheels deps)
 # ------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl wget unzip ca-certificates build-essential pkg-config \
+    git curl wget unzip vim ca-certificates build-essential pkg-config \
     libglib2.0-0 && \
     rm -rf /var/lib/apt/lists/*
 
