@@ -180,6 +180,10 @@ input — the interpretable `expr_` columns are kept for `niche-profile` markers
 Key options: `--niche-clusters` (KMeans k; omit for an automatic Leiden sweep),
 `--niche-k-hops`, `--niche-max-edge-len-um`, `--niche-soft` (probability instead of
 argmax composition), `--niche-mode` (`celltype`/`expression`/`both`),
+`--niche-epochs` (upper bound on DGI training epochs — early stopping is always
+active, patience 20 / min 50 epochs, so training may finish sooner),
+`--niche-amp` (CUDA automatic mixed precision for DGI training — faster, lower GPU
+memory; off by default; no effect on CPU/MPS),
 `--niche-pca-components` / `--disable-pca` (shared PCA of expression features),
 `--niche-batch-correct` (`none`/`center`/`harmony` cross-sample correction of the
 embeddings — use a technical unit such as sample/run as the batch, never a

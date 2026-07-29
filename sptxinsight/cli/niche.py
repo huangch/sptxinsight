@@ -87,7 +87,17 @@ def _slide_paths_from_results(results_dir: URIPath):
     default=300,
     show_default=True,
     type=click.IntRange(min=1),
-    help="DGI encoder training epochs.",
+    help="Upper bound on DGI encoder training epochs.  Early stopping is always "
+    "active (patience 20 epochs, min 50 epochs), so training may finish sooner.",
+)
+@click.option(
+    "--niche-amp",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Enable CUDA automatic mixed precision for DGI training (faster, lower "
+    "GPU memory).  Off by default.  No effect on CPU/MPS.  Note: FP16 math "
+    "changes results very slightly versus full FP32.",
 )
 @click.option(
     "--niche-soft",
@@ -166,6 +176,7 @@ def niche(
     niche_max_edge_len_um: float,
     niche_max_cell_radius_um: float,
     niche_epochs: int,
+    niche_amp: bool,
     niche_soft: bool,
     niche_mode: str,
     niche_batch_correct: str,
@@ -211,6 +222,7 @@ def niche(
         expression_pca=0 if disable_pca else niche_pca_components,
         overwrite=overwrite,
         slide_mpp_lookup=mpp_lookup,
+        amp=niche_amp,
     )
 
     ncells = results_dir / _NICHE_MODE_SPEC[niche_mode]["subdir"] / "cells"

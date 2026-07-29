@@ -151,7 +151,10 @@ stale cache.
 
 `--niche-clusters` (KMeans k; omit for an automatic Leiden sweep), `--niche-k-hops`,
 `--niche-max-edge-len-um`, `--niche-soft` (probability instead of argmax
-composition), `--niche-batch-correct` (`none`/`center`/`harmony` cross-sample
+composition), `--niche-epochs` (upper bound on DGI training epochs — early stopping
+is always active, patience 20 / min 50 epochs), `--niche-amp` (CUDA automatic mixed
+precision for DGI training — faster, lower GPU memory; off by default; no effect on
+CPU/MPS), `--niche-batch-correct` (`none`/`center`/`harmony` cross-sample
 correction of the embeddings — use a **technical** unit such as sample/run as
 the batch, never a biological condition), `--niche-regions` (merge cells into
 annotation-level regions). `--niche-expression` is a deprecated alias for

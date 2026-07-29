@@ -422,10 +422,24 @@ class DGIModule(nn.Module):
         return self.dgi.loss(pos_z, neg_z, s)
 
 
-def train_dgi_multi(slides, hidden=64, out_dim=32, epochs=300, lr=1e-3, wd=1e-4):
-    """Train a shared DGI encoder across sample graphs and return embeddings."""
+def train_dgi_multi(slides, hidden=64, out_dim=32, epochs=300, lr=1e-3, wd=1e-4,
+                    amp=False,
+                    early_stop_patience=20, early_stop_min_delta=1e-4,
+                    early_stop_min_epochs=50):
+    """Train a shared DGI encoder across sample graphs and return embeddings.
+
+    ``amp`` enables CUDA automatic mixed precision (no-op on CPU/MPS).  Early
+    stopping is always active: ``epochs`` is the upper bound, and training stops
+    once the mean epoch loss fails to improve by more than ``early_stop_min_delta``
+    (relative to the best loss) for ``early_stop_patience`` consecutive epochs,
+    but never before ``early_stop_min_epochs``.
+    """
     ngpu = torch.cuda.device_count() if torch.cuda.is_available() else 0
     primary = torch.device("cuda:0" if ngpu > 0 else "cpu")
+    use_amp = bool(amp) and primary.type == "cuda"
+    if primary.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     in_dim = slides[0]["X"].shape[1]
     enc = GCLEncoder(in_dim, hidden, out_dim).to(primary)
@@ -478,18 +492,41 @@ def train_dgi_multi(slides, hidden=64, out_dim=32, epochs=300, lr=1e-3, wd=1e-4)
 
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 
-    for _ in tqdm(range(epochs)):
+    best_loss = float("inf")
+    epochs_no_improve = 0
+    for epoch in tqdm(range(epochs)):
+        epoch_loss_sum = 0.0
+        n_batches = 0
         for batch in loader:
-            opt.zero_grad()
-            if ngpu > 1:
-                pos_z, neg_z, s = model(batch)
-                loss = model.module.loss(pos_z, neg_z, s)
+            opt.zero_grad(set_to_none=True)
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                if ngpu > 1:
+                    pos_z, neg_z, s = model(batch)
+                    loss = model.module.loss(pos_z, neg_z, s)
+                else:
+                    batch = batch.to(primary)
+                    pos_z, neg_z, s = model(batch)
+                    loss = model.loss(pos_z, neg_z, s)
+            scaler.scale(loss).backward()
+            scaler.step(opt)
+            scaler.update()
+
+            epoch_loss_sum += float(loss.detach())
+            n_batches += 1
+
+        if n_batches > 0:
+            epoch_loss = epoch_loss_sum / n_batches
+            # Relative improvement threshold so it adapts to the loss scale.
+            if epoch_loss < best_loss - early_stop_min_delta * max(abs(best_loss), 1.0):
+                best_loss = epoch_loss
+                epochs_no_improve = 0
             else:
-                batch = batch.to(primary)
-                pos_z, neg_z, s = model(batch)
-                loss = model.loss(pos_z, neg_z, s)
-            loss.backward()
-            opt.step()
+                epochs_no_improve += 1
+            if (epoch + 1) >= early_stop_min_epochs and epochs_no_improve >= early_stop_patience:
+                print(f"[DGI early-stop] no improvement > {early_stop_min_delta} (relative) for "
+                      f"{early_stop_patience} epochs; stopping at epoch {epoch + 1}/{epochs} "
+                      f"(best mean loss={best_loss:.4f}).")
+                break
 
     enc_eval = (model.module.dgi.encoder if ngpu > 1 else model.dgi.encoder).to(primary)
     enc_eval.eval()
@@ -640,7 +677,59 @@ def prepare_slide_graph(
 # =============================================================================
 
 
-def _knn_graph_connectivity(Z: np.ndarray, k_nn: int = 15):
+def _approx_knn_connectivity(Z: np.ndarray, k_nn: int = 15, seed: int = 0):
+    """Symmetric kNN connectivity via an approximate-NN backend.
+
+    Tries ``pynndescent`` then ``faiss``.  Returns a symmetric CSR connectivity
+    matrix (self-edges dropped) or ``None`` if neither backend is importable, in
+    which case the caller falls back to exact sklearn kNN.
+    """
+    import scipy.sparse as sp
+
+    n = Z.shape[0]
+    Zf = np.ascontiguousarray(Z, dtype=np.float32)
+    k = min(k_nn + 1, n)  # +1 because the first neighbour is the point itself
+
+    # --- pynndescent -------------------------------------------------------
+    try:
+        from pynndescent import NNDescent
+
+        index = NNDescent(Zf, n_neighbors=k, metric="euclidean",
+                          random_state=seed)
+        neighbors, _ = index.neighbor_graph
+    except Exception:
+        neighbors = None
+
+    # --- faiss -------------------------------------------------------------
+    if neighbors is None:
+        try:
+            import faiss
+
+            index = faiss.IndexFlatL2(Zf.shape[1])
+            index.add(Zf)
+            _, neighbors = index.search(Zf, k)
+        except Exception:
+            return None
+
+    rows = np.repeat(np.arange(n), neighbors.shape[1])
+    cols = neighbors.reshape(-1)
+    keep = rows != cols  # drop self-edges
+    rows, cols = rows[keep], cols[keep]
+    data = np.ones(rows.shape[0], dtype=np.float32)
+    A = sp.csr_matrix((data, (rows, cols)), shape=(n, n))
+    A = A.maximum(A.T).tocsr()  # symmetrize
+    return A
+
+
+def _knn_graph_connectivity(Z: np.ndarray, k_nn: int = 15, seed: int = 0):
+    A = _approx_knn_connectivity(Z, k_nn=k_nn, seed=seed)
+    if A is not None:
+        return A
+    click.secho(
+        "[niche] no approximate-NN backend (pynndescent/faiss) importable; "
+        "falling back to exact sklearn kNN (slower).",
+        fg="yellow",
+    )
     A = kneighbors_graph(Z, n_neighbors=k_nn, mode="connectivity", include_self=False)
     A = A.maximum(A.T).tocsr()  # symmetrize
     return A
@@ -996,6 +1085,8 @@ def niche_generation(
     expression_pca: int = 50,
     overwrite: bool = False,
     slide_mpp_lookup: Mapping[str, float] | None = None,
+    # performance
+    amp: bool = False,
 ) -> None:
     """Discover niches across a cohort of spatial-transcriptomics samples.
 
@@ -1188,7 +1279,7 @@ def niche_generation(
             fg="green",
         )
         _, Z_list = train_dgi_multi(
-            slides, hidden=hidden, out_dim=out_dim, epochs=epochs
+            slides, hidden=hidden, out_dim=out_dim, epochs=epochs, amp=amp
         )
         joblib.dump(Z_list, niche_dgi_embeddings_file, compress=3)
 
