@@ -92,7 +92,7 @@ pip install scikit-learn joblib
 pip install pyogrio shapely geopandas
 
 # ── Graph clustering ──────────────────────────────────────────────────────────
-pip install igraph leidenalg
+pip install igraph leidenalg pynndescent
 
 # ── Cloud I/O (version-capped to stay compatible with wsinsight's zarr<3 stack)
 # Pre-install aiobotocore + boto3 with explicit compatible versions to avoid

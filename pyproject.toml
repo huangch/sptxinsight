@@ -58,6 +58,7 @@ dependencies = [
   "scikit-learn",
   "igraph",
   "leidenalg",
+  "pynndescent",  # approximate kNN for the niche Leiden/kNN connectivity graph
   "joblib",
   "geopandas",
   "shapely",
