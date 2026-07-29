@@ -88,7 +88,31 @@ def _slide_paths_from_results(results_dir: URIPath):
     show_default=True,
     type=click.IntRange(min=1),
     help="Upper bound on DGI encoder training epochs.  Early stopping is always "
-    "active (patience 20 epochs, min 50 epochs), so training may finish sooner.",
+    "active, so training may finish sooner (see --niche-patience, "
+    "--niche-min-delta and --niche-min-epochs).",
+)
+@click.option(
+    "--niche-patience",
+    default=20,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Early-stopping patience: stop after this many consecutive epochs "
+    "without a mean-loss improvement greater than --niche-min-delta.",
+)
+@click.option(
+    "--niche-min-delta",
+    default=1e-4,
+    show_default=True,
+    type=click.FloatRange(min=0),
+    help="Minimum relative mean-loss improvement required to reset the "
+    "early-stopping patience counter.",
+)
+@click.option(
+    "--niche-min-epochs",
+    default=50,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Never trigger early stopping before this many epochs have elapsed.",
 )
 @click.option(
     "--niche-amp",
@@ -176,6 +200,9 @@ def niche(
     niche_max_edge_len_um: float,
     niche_max_cell_radius_um: float,
     niche_epochs: int,
+    niche_patience: int,
+    niche_min_delta: float,
+    niche_min_epochs: int,
     niche_amp: bool,
     niche_soft: bool,
     niche_mode: str,
@@ -212,6 +239,9 @@ def niche(
         hidden=64,
         out_dim=32,
         epochs=niche_epochs,
+        early_stop_patience=niche_patience,
+        early_stop_min_delta=niche_min_delta,
+        early_stop_min_epochs=niche_min_epochs,
         niche_cellular=True,
         niche_annotation=niche_regions,
         niche_clustering_k=niche_clusters,

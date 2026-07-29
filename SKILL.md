@@ -152,7 +152,11 @@ stale cache.
 `--niche-clusters` (KMeans k; omit for an automatic Leiden sweep), `--niche-k-hops`,
 `--niche-max-edge-len-um`, `--niche-soft` (probability instead of argmax
 composition), `--niche-epochs` (upper bound on DGI training epochs — early stopping
-is always active, patience 20 / min 50 epochs), `--niche-amp` (CUDA automatic mixed
+is always active, so training may finish sooner), `--niche-patience` (consecutive
+epochs without a mean-loss improvement > `--niche-min-delta` before stopping;
+default 20), `--niche-min-delta` (minimum relative improvement to reset patience;
+default 1e-4), `--niche-min-epochs` (never stop before this many epochs; default 50),
+`--niche-amp` (CUDA automatic mixed
 precision for DGI training — faster, lower GPU memory; off by default; no effect on
 CPU/MPS), `--niche-batch-correct` (`none`/`center`/`harmony` cross-sample
 correction of the embeddings — use a **technical** unit such as sample/run as

@@ -1085,6 +1085,10 @@ def niche_generation(
     expression_pca: int = 50,
     overwrite: bool = False,
     slide_mpp_lookup: Mapping[str, float] | None = None,
+    # early stopping (always active)
+    early_stop_patience: int = 20,
+    early_stop_min_delta: float = 1e-4,
+    early_stop_min_epochs: int = 50,
     # performance
     amp: bool = False,
 ) -> None:
@@ -1279,7 +1283,11 @@ def niche_generation(
             fg="green",
         )
         _, Z_list = train_dgi_multi(
-            slides, hidden=hidden, out_dim=out_dim, epochs=epochs, amp=amp
+            slides, hidden=hidden, out_dim=out_dim, epochs=epochs,
+            early_stop_patience=early_stop_patience,
+            early_stop_min_delta=early_stop_min_delta,
+            early_stop_min_epochs=early_stop_min_epochs,
+            amp=amp
         )
         joblib.dump(Z_list, niche_dgi_embeddings_file, compress=3)
 
