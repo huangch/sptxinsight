@@ -1,9 +1,9 @@
 """FastMCP server exposing sptxinsight subcommands as MCP tools.
 
 Tools are auto-registered from the live CLI schema. Long-running commands
-(``run``, ``ingest``, ``verify``, ``cme`` …) return a ``job_id`` immediately
+(``run``, ``ingest``, ``verify``, ``niche`` …) return a ``job_id`` immediately
 and the agent polls ``job_status`` / ``job_logs`` / ``cancel_job``. Short
-commands (``export``, ``cme-profile``) run synchronously and return the
+commands (``export``, ``niche-profile``) run synchronously and return the
 subprocess exit code plus a tail of its stdout/stderr.
 
 Each subcommand is exposed with the exact Click parameter names and types from
@@ -310,7 +310,7 @@ def build_server(
         name="cell_typing_to_niches",
         description=(
             "Walk through a spatial-transcriptomics analysis end-to-end "
-            "(ingest -> annotate -> verify -> cme niche discovery) using the sptxinsight "
+            "(ingest -> annotate -> verify -> niche discovery) using the sptxinsight "
             "tools exposed by this server."
         ),
     )
@@ -328,7 +328,7 @@ def build_server(
             "per-cell CSVs under the results directory.\n"
             f"{annotate_step}"
             "3. Call `verify` (long-running) to validate the produced labels.\n"
-            "4. Call `cme` (long-running) to discover cellular-microenvironment "
+            "4. Call `niche` (long-running) to discover niche "
             "niches; poll `job_status` until done.\n"
             "5. Call `export` to write the niche / composition tables.\n"
             "6. Read the `sptxinsight://results/<results-dir>/layout` resource to "

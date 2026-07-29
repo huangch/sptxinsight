@@ -3,7 +3,7 @@
 # CUDA 12.8 + cuDNN + Ubuntu 22.04
 # ====================================
 # Independent of the wsinsight image. Ships the sptxinsight CLI and the
-# `sptxinsight-mcp` MCP server. Runs cell-typing / CME niche discovery / H-Plot
+# `sptxinsight-mcp` MCP server. Runs cell-typing / niche niche discovery / H-Plot
 # / CCI over spatial-transcriptomics data on the GPU.
 FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu22.04
 
@@ -54,7 +54,7 @@ ENV PATH="$CONDA_DIR/envs/sptxinsight/bin:$PATH"
 RUN python -m pip install --upgrade pip
 
 # ------------------------------------
-# GPU stack: torch + torch_geometric (CME niche autoencoder training)
+# GPU stack: torch + torch_geometric (niche niche autoencoder training)
 # ------------------------------------
 RUN pip install --retries 10 "numpy<2" torch torchvision torch_geometric
 

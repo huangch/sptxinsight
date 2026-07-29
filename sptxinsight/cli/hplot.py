@@ -48,24 +48,24 @@ def _slide_paths_from_results(
     "base_types",
     callback=csv_to_list,
     default=None,
-    help="Base cell type(s)/gene(s)/CME id(s) forming the cluster(s).",
+    help="Base cell type(s)/gene(s)/niche id(s) forming the cluster(s).",
 )
 @click.option(
     "--target-type",
     "target_types",
     callback=csv_to_list,
     default=None,
-    help="Target cell type(s)/gene(s)/CME id(s) whose layer-wise proportion is computed.",
+    help="Target cell type(s)/gene(s)/niche id(s) whose layer-wise proportion is computed.",
 )
 @click.option(
     "--base-by",
     default="celltype",
     show_default=True,
     type=click.Choice(
-        ["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci", "aggregate"]
+        ["celltype", "gene", "niche", "nichegex", "nichehybrid", "cci", "aggregate"]
     ),
-    help="Interpret --base-type as cell types, genes, a CME niche family "
-    "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), "
+    help="Interpret --base-type as cell types, genes, a niche family "
+    "(niche=celltype niches, nichegex=gene niches, nichehybrid=fused), "
     "cci (ligand-receptor score columns from `sptxinsight cci`), or "
     "aggregate (object_<name>_prob_<name> columns from `sptxinsight agg`).",
 )
@@ -74,10 +74,10 @@ def _slide_paths_from_results(
     default="celltype",
     show_default=True,
     type=click.Choice(
-        ["celltype", "gene", "cme", "cmegex", "cmehybrid", "cci", "aggregate"]
+        ["celltype", "gene", "niche", "nichegex", "nichehybrid", "cci", "aggregate"]
     ),
-    help="Interpret --target-type as cell types, genes, a CME niche family "
-    "(cme=celltype niches, cmegex=gene niches, cmehybrid=fused), "
+    help="Interpret --target-type as cell types, genes, a niche family "
+    "(niche=celltype niches, nichegex=gene niches, nichehybrid=fused), "
     "cci (ligand-receptor score columns from `sptxinsight cci`), or "
     "aggregate (object_<name>_prob_<name> columns from `sptxinsight agg`).",
 )
@@ -165,23 +165,23 @@ def hplot(
 ) -> None:
     """Compute H-Plot layer curves from already-ingested model-output CSVs."""
     slide_paths, mpp_lookup = _slide_paths_from_results(results_dir)
-    # CME (niche) one-hot columns live in the cme*-outputs-csv/cells/ folder of
-    # the matching --cme-mode run (a superset of model-outputs-csv that also
+    # niche one-hot columns live in the niche*-outputs-csv/cells/ folder of
+    # the matching --niche-mode run (a superset of model-outputs-csv that also
     # carries prob_/expr_ columns). Read from the right family folder whenever an
-    # axis is a CME family; both CME axes must use the same family (one file).
+    # axis is a niche family; both niche axes must use the same family (one file).
     from ..insightlib.hplot_generation import _CCI_SUBDIR
-    from ..insightlib.hplot_generation import _CME_FAMILY_SUBDIR
+    from ..insightlib.hplot_generation import _NICHE_FAMILY_SUBDIR
 
-    # Axes that read from a non-default cells folder (CME families or CCI). All
+    # Axes that read from a non-default cells folder (niche families or CCI). All
     # such axes in one run must agree on a single folder (one file is read).
-    _AXIS_SUBDIR = {**_CME_FAMILY_SUBDIR, "cci": _CCI_SUBDIR}
+    _AXIS_SUBDIR = {**_NICHE_FAMILY_SUBDIR, "cci": _CCI_SUBDIR}
     special_axes = [_AXIS_SUBDIR[b] for b in (base_by, target_by) if b in _AXIS_SUBDIR]
     if special_axes:
         if len(set(special_axes)) > 1:
             raise click.ClickException(
                 "--base-by and --target-by select different cells folders "
                 f"({base_by!r} vs {target_by!r}); they must read the same file. "
-                "Combine a cci/cme axis only with celltype, or with the same family."
+                "Combine a cci/niche axis only with celltype, or with the same family."
             )
         model_output_subdir = special_axes[0]
     else:

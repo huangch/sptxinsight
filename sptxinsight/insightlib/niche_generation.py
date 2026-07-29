@@ -1,9 +1,9 @@
-"""Cellular microenvironment (CME) discovery for sptxinsight.
+"""Niche discovery for sptxinsight.
 
-Vendored and adapted from WSInsight's ``insightlib.cme_generation``. The pipeline
+Vendored and adapted from WSInsight's ``insightlib.niche_generation``. The pipeline
 builds a per-sample Delaunay cell graph, computes k-hop cell-type composition
 features, trains one shared Deep Graph Infomax (DGI) encoder across all samples,
-clusters the embeddings into recurring microenvironments, and writes per-cell CME
+clusters the embeddings into recurring microenvironments, and writes per-cell niche
 labels (and, optionally, merged annotation-level regions).
 
 Differences from the WSInsight original:
@@ -18,7 +18,7 @@ Differences from the WSInsight original:
 
 Heavy dependencies (``torch``, ``torch_geometric``, ``scikit-learn``,
 ``igraph``, ``leidenalg``) are imported at module load, so this module is
-only imported lazily from the ``cme`` CLI command. The annotation-level region
+only imported lazily from the ``niche`` CLI command. The annotation-level region
 merge additionally needs ``geopandas``/``shapely`` and is imported on demand.
 """
 
@@ -508,7 +508,7 @@ def train_dgi_multi(slides, hidden=64, out_dim=32, epochs=300, lr=1e-3, wd=1e-4)
 
 
 def prepare_slide_graph(
-    cme_detection_df: pd.DataFrame,
+    niche_detection_df: pd.DataFrame,
     mpp_um_per_px: float,
     max_edge_len_um: float,
     class_order: Optional[List[str]] = None,
@@ -549,7 +549,7 @@ def prepare_slide_graph(
     want_celltype = feature_source in ("celltype", "both")
     want_expression = feature_source in ("expression", "both")
 
-    df = compute_cell_center_points(cme_detection_df.copy())
+    df = compute_cell_center_points(niche_detection_df.copy())
     centers_px = df[["center_x", "center_y"]].to_numpy(dtype=np.float32)
     N = len(df)
 
@@ -591,9 +591,9 @@ def prepare_slide_graph(
         if not expr_cols:
             if feature_source == "expression":
                 raise errors.WsinferException(
-                    f"--cme-mode expression needs expr_ columns, but sample "
+                    f"--niche-mode expression needs expr_ columns, but sample "
                     f"{slide_id!r} has none. Re-ingest with transcript data, or "
-                    f"use --cme-mode celltype."
+                    f"use --niche-mode celltype."
                 )
             # 'both' on a sample without expression: fall back to composition.
         elif expr_pca is not None:
@@ -602,7 +602,7 @@ def prepare_slide_graph(
             # sample is projected with the same components, keeping niches
             # comparable across the cohort. The feature block then carries PC
             # scores (pc0..) instead of raw genes; the model df keeps the
-            # interpretable expr_ columns for cme-profile markers.
+            # interpretable expr_ columns for niche-profile markers.
             use_cols = expr_pca_cols if expr_pca_cols is not None else expr_cols
             V = df.reindex(columns=use_cols).to_numpy(dtype=np.float32)
             V = np.nan_to_num(V)[kept_idx]
@@ -711,7 +711,7 @@ def _reduce_resolution_worker(args):
 def _leiden_sweep_on_graph(
     Z: np.ndarray,
     g: ig.Graph,
-    cme_clustering_resolutions: Iterable[float] = np.arange(0.2, 2.05, 0.1),
+    niche_clustering_resolutions: Iterable[float] = np.arange(0.2, 2.05, 0.1),
     n_repeats: int = 5,
 ) -> Dict[str, Any]:
     """Parallel sweep over (resolution, repeat) and parallel reduction per resolution.
@@ -723,7 +723,7 @@ def _leiden_sweep_on_graph(
     if el.size == 0:
         labels = np.zeros(n_nodes, dtype=int)
         out = {
-            "resolution": float(next(iter(cme_clustering_resolutions), 1.0)),
+            "resolution": float(next(iter(niche_clustering_resolutions), 1.0)),
             "n_clusters": 1,
             "modularity": 0.0,
             "stability": 1.0,
@@ -735,7 +735,7 @@ def _leiden_sweep_on_graph(
 
     # ---- Phase A: parallel Leiden runs over (resolution, repeat) ----
     tasks = []
-    for r in cme_clustering_resolutions:
+    for r in niche_clustering_resolutions:
         for _ in range(n_repeats):
             tasks.append((n_nodes, el, float(r)))
 
@@ -771,14 +771,14 @@ def _leiden_sweep_on_graph(
     return {"winner": winner, "all": logs}
 
 
-def estimate_cmes_from_Z_list(
+def estimate_niches_from_Z_list(
     Z_list: List[np.ndarray],
     mode: str = "global",  # "global" (recommended) or "per_slide"
     k_nn: int = 15,
-    cme_clustering_resolutions=np.arange(0.2, 2.05, 0.1),  # noqa: B008
+    niche_clustering_resolutions=np.arange(0.2, 2.05, 0.1),  # noqa: B008
     n_repeats: int = 5,
 ) -> Dict[str, Any]:
-    """Auto-estimate the number of CMEs via a Leiden community-detection sweep."""
+    """Auto-estimate the number of niches via a Leiden community-detection sweep."""
     if mode == "global":
         offsets = np.cumsum([0] + [Z.shape[0] for Z in Z_list[:-1]])
         Z_all = np.vstack(Z_list)
@@ -787,7 +787,7 @@ def estimate_cmes_from_Z_list(
         sweep = _leiden_sweep_on_graph(
             Z_all,
             g,
-            cme_clustering_resolutions=cme_clustering_resolutions,
+            niche_clustering_resolutions=niche_clustering_resolutions,
             n_repeats=n_repeats,
         )
         w = sweep["winner"]
@@ -813,7 +813,7 @@ def estimate_cmes_from_Z_list(
             sweep = _leiden_sweep_on_graph(
                 Z,
                 g,
-                cme_clustering_resolutions=cme_clustering_resolutions,
+                niche_clustering_resolutions=niche_clustering_resolutions,
                 n_repeats=n_repeats,
             )
             w = sweep["winner"]
@@ -847,17 +847,17 @@ def _mpp_for(wsi_path, slide_mpp_lookup: Mapping[str, float] | None) -> float:
 
 
 # =============================================================================
-# CME mode namespacing + cross-sample batch correction
+# niche mode namespacing + cross-sample batch correction
 # =============================================================================
 
 # Each mode writes to its own output dir / one-hot column prefix / checkpoint
 # suffix so cell-type, gene-expression, and hybrid niches can coexist on the
 # same cells without clobbering each other. ``celltype`` keeps the original
-# (unsuffixed) paths and ``cme_`` prefix for backward compatibility.
-_CME_MODE_SPEC: Dict[str, Dict[str, str]] = {
-    "celltype": {"subdir": "cme-outputs-csv", "prefix": "cme", "ckpt": ""},
-    "expression": {"subdir": "cme-gex-outputs-csv", "prefix": "gexcme", "ckpt": "-gex"},
-    "both": {"subdir": "cme-hybrid-outputs-csv", "prefix": "hcme", "ckpt": "-hybrid"},
+# (unsuffixed) paths and ``niche_`` prefix for backward compatibility.
+_NICHE_MODE_SPEC: Dict[str, Dict[str, str]] = {
+    "celltype": {"subdir": "niche-outputs-csv", "prefix": "niche", "ckpt": ""},
+    "expression": {"subdir": "niche-gex-outputs-csv", "prefix": "gexniche", "ckpt": "-gex"},
+    "both": {"subdir": "niche-hybrid-outputs-csv", "prefix": "hniche", "ckpt": "-hybrid"},
 }
 
 
@@ -971,7 +971,7 @@ def _fit_expression_pca(model_output_paths: Sequence[Path], n_components: int):
 # =============================================================================
 
 
-def cme_generation(
+def niche_generation(
     wsi_dir: str | URIPath | None,
     wsi_paths: Sequence[Path | URIPath] | None,
     results_dir: str | Path,
@@ -985,25 +985,25 @@ def cme_generation(
     out_dim: int = 32,
     epochs: int = 300,
     # clustering
-    cme_cellular: bool = False,
-    cme_annotation: bool = False,
-    cme_clustering_k: int | None = 10,
-    cme_clustering_resolutions: List[float] = [0.5, 1.0, 2.0],  # noqa: B006
-    cme_soft_mode: bool = False,
+    niche_cellular: bool = False,
+    niche_annotation: bool = False,
+    niche_clustering_k: int | None = 10,
+    niche_clustering_resolutions: List[float] = [0.5, 1.0, 2.0],  # noqa: B006
+    niche_soft_mode: bool = False,
     use_expression: bool = False,
-    cme_mode: str = "celltype",
+    niche_mode: str = "celltype",
     batch_correct: str = "none",
     expression_pca: int = 50,
     overwrite: bool = False,
     slide_mpp_lookup: Mapping[str, float] | None = None,
 ) -> None:
-    """Discover CMEs across a cohort of spatial-transcriptomics samples.
+    """Discover niches across a cohort of spatial-transcriptomics samples.
 
     Builds per-sample Delaunay cell graphs, trains one shared DGI encoder, clusters
-    the embeddings, and writes per-cell CME labels (and optional region merges).
+    the embeddings, and writes per-cell niche labels (and optional region merges).
 
-    ``cme_mode`` selects which features drive the niches and namespaces all
-    outputs/checkpoints (see :data:`_CME_MODE_SPEC`): ``celltype`` (default,
+    ``niche_mode`` selects which features drive the niches and namespaces all
+    outputs/checkpoints (see :data:`_NICHE_MODE_SPEC`): ``celltype`` (default,
     byte-identical to the original behaviour), ``expression`` (gene niches), or
     ``both`` (fused). The legacy ``use_expression`` flag maps to ``both``.
     ``batch_correct`` (``none``/``center``/``harmony``) is applied to the DGI
@@ -1012,13 +1012,13 @@ def cme_generation(
     panel to that many shared principal components before the k-hop aggregation;
     set it to 0 to feed all genes in.
     """
-    if use_expression and cme_mode == "celltype":
-        cme_mode = "both"
-    if cme_mode not in _CME_MODE_SPEC:
+    if use_expression and niche_mode == "celltype":
+        niche_mode = "both"
+    if niche_mode not in _NICHE_MODE_SPEC:
         raise ValueError(
-            f"cme_mode must be one of {sorted(_CME_MODE_SPEC)}, got {cme_mode!r}"
+            f"niche_mode must be one of {sorted(_NICHE_MODE_SPEC)}, got {niche_mode!r}"
         )
-    mode_spec = _CME_MODE_SPEC[cme_mode]
+    mode_spec = _NICHE_MODE_SPEC[niche_mode]
 
     if os.getenv("SPTXINSIGHT_FORCE_CPU", "0").lower() not in {"0", "f", "false"}:
         device = torch.device("cpu")
@@ -1074,25 +1074,25 @@ def cme_generation(
             "The 'model-outputs-csv' and sample directory were mismatched."
         )
 
-    cme_output_dir = results_dir / mode_spec["subdir"]
-    cme_output_dir.mkdir(exist_ok=True)
-    cme_cells_output_dir = cme_output_dir / "cells"
-    cme_cells_output_dir.mkdir(exist_ok=True)
-    cme_cmes_output_dir = cme_output_dir / "cmes"
-    cme_cmes_output_dir.mkdir(exist_ok=True)
+    niche_output_dir = results_dir / mode_spec["subdir"]
+    niche_output_dir.mkdir(exist_ok=True)
+    niche_cells_output_dir = niche_output_dir / "cells"
+    niche_cells_output_dir.mkdir(exist_ok=True)
+    niche_niches_output_dir = niche_output_dir / "niches"
+    niche_niches_output_dir.mkdir(exist_ok=True)
     # PCA only reduces expression features; tag the checkpoints so toggling
     # --disable-pca never silently reuses an incompatible cached graph/embedding.
-    pca_on = cme_mode in ("expression", "both") and bool(expression_pca)
+    pca_on = niche_mode in ("expression", "both") and bool(expression_pca)
     pca_tag = f"-pca{int(expression_pca)}" if pca_on else ""
-    cme_slide_graph_file = (
+    niche_slide_graph_file = (
         results_dir / f"slide-graphs{mode_spec['ckpt']}{pca_tag}.joblib"
     )
-    cme_dgi_embeddings_file = (
+    niche_dgi_embeddings_file = (
         results_dir / f"dgi-embeddings{mode_spec['ckpt']}{pca_tag}.joblib"
     )
 
     if overwrite:
-        for _ckpt in (cme_slide_graph_file, cme_dgi_embeddings_file):
+        for _ckpt in (niche_slide_graph_file, niche_dgi_embeddings_file):
             if _ckpt.exists():
                 _ckpt.unlink()
 
@@ -1100,15 +1100,15 @@ def cme_generation(
     slides: list = []
     classes = None
 
-    if cme_slide_graph_file.exists():
+    if niche_slide_graph_file.exists():
         click.secho(
-            "\nPhase 1/5: Build sample graphs for CMEGCN.\n"
-            f"Load existing graph file: {cme_slide_graph_file}\n",
+            "\nPhase 1/5: Build sample graphs for NicheGCN.\n"
+            f"Load existing graph file: {niche_slide_graph_file}\n",
             fg="green",
         )
-        slides = joblib.load(cme_slide_graph_file)
+        slides = joblib.load(niche_slide_graph_file)
     else:
-        click.secho("\nPhase 1/5: build sample graphs for CMEGCN.\n", fg="green")
+        click.secho("\nPhase 1/5: build sample graphs for NicheGCN.\n", fg="green")
 
         graph_cache_dir = Path(str(results_dir)) / "graphs"
         graph_cache_dir.mkdir(parents=True, exist_ok=True)
@@ -1157,8 +1157,8 @@ def cme_generation(
                 alpha=alpha,
                 graph_cache_dir=graph_cache_dir,
                 slide_id=slide_id,
-                mode="soft" if cme_soft_mode else "hard",
-                feature_source=cme_mode,
+                mode="soft" if niche_soft_mode else "hard",
+                feature_source=niche_mode,
                 expr_pca=expr_pca,
                 expr_pca_cols=expr_pca_cols,
             )
@@ -1172,16 +1172,16 @@ def cme_generation(
         for s in slides:
             s["X_normalized"] = scaler.transform(s["X"]).astype(np.float32)
 
-        joblib.dump(slides, cme_slide_graph_file, compress=3)
+        joblib.dump(slides, niche_slide_graph_file, compress=3)
 
     # ---- Phase 2/5: shared DGI encoder + embeddings ------------------------
-    if cme_dgi_embeddings_file.exists():
+    if niche_dgi_embeddings_file.exists():
         click.secho(
             "\nPhase 2/5: Train shared DGI encoder and get embeddings per sample.\n"
-            f"Load existing embeddings file: {cme_dgi_embeddings_file}\n",
+            f"Load existing embeddings file: {niche_dgi_embeddings_file}\n",
             fg="green",
         )
-        Z_list = joblib.load(cme_dgi_embeddings_file)
+        Z_list = joblib.load(niche_dgi_embeddings_file)
     else:
         click.secho(
             "\nPhase 2/5: Train shared DGI encoder and get embeddings per sample.\n",
@@ -1190,7 +1190,7 @@ def cme_generation(
         _, Z_list = train_dgi_multi(
             slides, hidden=hidden, out_dim=out_dim, epochs=epochs
         )
-        joblib.dump(Z_list, cme_dgi_embeddings_file, compress=3)
+        joblib.dump(Z_list, niche_dgi_embeddings_file, compress=3)
 
     # ---- Phase 2b/5: cross-sample batch correction on embeddings -----------
     # Applied AFTER (re)loading the raw embeddings so the checkpoint stays
@@ -1204,45 +1204,45 @@ def cme_generation(
         Z_list = _apply_batch_correction(Z_list, batch_correct, sample_ids)
 
     # ---- Phase 3/5: choose cluster count -----------------------------------
-    if not cme_clustering_k:
-        click.secho("\nPhase 3/5: Estimate CME cluster number.\n", fg="green")
-        est = estimate_cmes_from_Z_list(
+    if not niche_clustering_k:
+        click.secho("\nPhase 3/5: Estimate niche cluster number.\n", fg="green")
+        est = estimate_niches_from_Z_list(
             Z_list,
             mode="global",
-            cme_clustering_resolutions=cme_clustering_resolutions,
+            niche_clustering_resolutions=niche_clustering_resolutions,
             k_nn=15,
         )
-        cme_clustering_k = est["winner"]["n_clusters"]
+        niche_clustering_k = est["winner"]["n_clusters"]
         labels_list = est["labels_list"]
     else:
         click.secho(
-            f"\nPhase 3/5: Use predefined CME cluster number: cme_clustering_k={cme_clustering_k}.\n",
+            f"\nPhase 3/5: Use predefined niche cluster number: niche_clustering_k={niche_clustering_k}.\n",
             fg="green",
         )
         labels_list = [
-            KMeans(n_clusters=cme_clustering_k, n_init="auto")
+            KMeans(n_clusters=niche_clustering_k, n_init="auto")
             .fit_predict(Z)
             .astype(np.int32)
             for Z in Z_list
         ]
 
-    # ---- Phase 4/5: cellular-level CME labels ------------------------------
+    # ---- Phase 4/5: cellular-level niche labels ------------------------------
     click.secho(
-        "\nPhase 4/5: Perform cellular-level CME analysis per sample.\n", fg="green"
+        "\nPhase 4/5: Perform cellular-level niche analysis per sample.\n", fg="green"
     )
-    if cme_cellular:
+    if niche_cellular:
         for i, (wsi_path, model_output_csv) in tqdm(
             enumerate(zip(slide_paths, model_output_paths, strict=False)),
             total=len(slide_paths),
         ):
             raise_if_cancelled()
-            cme_csv_name = Path(str(wsi_path)).with_suffix(".csv").name
-            cell_csv = cme_cells_output_dir / cme_csv_name
+            niche_csv_name = Path(str(wsi_path)).with_suffix(".csv").name
+            cell_csv = niche_cells_output_dir / niche_csv_name
 
             if not overwrite and cell_csv.exists():
                 continue
 
-            cme_detection_df = pd.read_csv(model_output_csv)
+            niche_detection_df = pd.read_csv(model_output_csv)
 
             slide_classes = slides[i]["classes"]
             slide_genes = slides[i].get("genes", [])
@@ -1264,34 +1264,34 @@ def cme_generation(
                 for k in range(k_hops + 1)
                 for g in slide_genes
             ]
-            cme_detection_df.loc[
+            niche_detection_df.loc[
                 slides[i]["kept_idx"], feature_normalized_cols
             ] = slides[i]["X_normalized"]
-            cme_detection_df.loc[slides[i]["kept_idx"], feature_cols] = slides[i]["X"]
-            cme_cols = [
-                f"{mode_spec['prefix']}_{idx}" for idx in range(cme_clustering_k)
+            niche_detection_df.loc[slides[i]["kept_idx"], feature_cols] = slides[i]["X"]
+            niche_cols = [
+                f"{mode_spec['prefix']}_{idx}" for idx in range(niche_clustering_k)
             ]
-            label_one_hot = np.eye(cme_clustering_k, dtype=np.float32)[labels_list[i]]
-            cme_detection_df.loc[slides[i]["kept_idx"], cme_cols] = label_one_hot
+            label_one_hot = np.eye(niche_clustering_k, dtype=np.float32)[labels_list[i]]
+            niche_detection_df.loc[slides[i]["kept_idx"], niche_cols] = label_one_hot
 
             with critical_section(
-                f"saving CME cell output for {Path(str(wsi_path)).stem}"
+                f"saving niche cell output for {Path(str(wsi_path)).stem}"
             ):
-                cme_detection_df.to_csv(cell_csv, index=False)
+                niche_detection_df.to_csv(cell_csv, index=False)
 
-    # ---- Phase 5/5: annotation-level CME regions ---------------------------
+    # ---- Phase 5/5: annotation-level niche regions ---------------------------
     click.secho(
-        "\nPhase 5/5: Perform annotation-level CME analysis per sample.\n", fg="green"
+        "\nPhase 5/5: Perform annotation-level niche analysis per sample.\n", fg="green"
     )
-    if cme_annotation:
+    if niche_annotation:
         try:
-            from .vorononi_cme_region_helper import (
+            from .vorononi_niche_region_helper import (
                 merge_same_label_by_shared_edges_iterative,
             )
-            from .vorononi_cme_region_helper import remap_edges_to_valid_indices
+            from .vorononi_niche_region_helper import remap_edges_to_valid_indices
         except ImportError as exc:
             raise RuntimeError(
-                "Annotation-level CME regions need geopandas and shapely. "
+                "Annotation-level niche regions need geopandas and shapely. "
                 "Install them with: pip install geopandas shapely."
             ) from exc
 
@@ -1300,29 +1300,29 @@ def cme_generation(
             total=len(slide_paths),
         ):
             raise_if_cancelled()
-            cme_csv_name = Path(str(wsi_path)).with_suffix(".csv").name
-            cell_csv = cme_cells_output_dir / cme_csv_name
-            cme_csv = cme_cmes_output_dir / cme_csv_name
+            niche_csv_name = Path(str(wsi_path)).with_suffix(".csv").name
+            cell_csv = niche_cells_output_dir / niche_csv_name
+            niche_csv = niche_niches_output_dir / niche_csv_name
 
-            if not overwrite and cme_csv.exists():
+            if not overwrite and niche_csv.exists():
                 continue
 
             mpp = _mpp_for(wsi_path, slide_mpp_lookup)
-            cme_detection_df = pd.read_csv(cell_csv)
-            valid_mask = np.zeros(len(cme_detection_df), dtype=bool)
+            niche_detection_df = pd.read_csv(cell_csv)
+            valid_mask = np.zeros(len(niche_detection_df), dtype=bool)
             valid_mask[np.asarray(slides[i]["kept_idx"], dtype=int)] = True
             edges_df = remap_edges_to_valid_indices(slides[i]["edges_df"], valid_mask)
 
-            cme_annotation_df = merge_same_label_by_shared_edges_iterative(
-                cme_detection_df,
+            niche_annotation_df = merge_same_label_by_shared_edges_iterative(
+                niche_detection_df,
                 edges_df,
-                cme_clustering_k=cme_clustering_k,
+                niche_clustering_k=niche_clustering_k,
                 mpp=mpp,
                 max_radius_um=max_cell_radius_um,
-                cme_prefix=f"{mode_spec['prefix']}_",
+                niche_prefix=f"{mode_spec['prefix']}_",
             )
 
             with critical_section(
-                f"saving CME annotation output for {Path(str(wsi_path)).stem}"
+                f"saving niche annotation output for {Path(str(wsi_path)).stem}"
             ):
-                cme_annotation_df.to_csv(cme_csv, index=False)
+                niche_annotation_df.to_csv(niche_csv, index=False)

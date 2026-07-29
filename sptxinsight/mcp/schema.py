@@ -24,8 +24,8 @@ STABLE_COMMANDS: frozenset[str] = frozenset(
         "marker-rerank",
         "verify",
         "export",
-        "cme",
-        "cme-profile",
+        "niche",
+        "niche-profile",
     }
 )
 EXPERIMENTAL_COMMANDS: frozenset[str] = frozenset(
@@ -44,7 +44,7 @@ LONG_RUNNING_COMMANDS: frozenset[str] = frozenset(
         "marker-init",
         "marker-rerank",
         "verify",
-        "cme",
+        "niche",
         "hplot",
         "cci",
         "agg",

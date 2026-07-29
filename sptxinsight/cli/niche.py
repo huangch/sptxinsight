@@ -1,23 +1,23 @@
-"""``sptxinsight cme``: cellular microenvironment (CME) / niche discovery.
+"""``sptxinsight niche``: niche / niche discovery.
 
 Operates on a results directory whose ``model-outputs-csv/`` was populated by
 ``sptxinsight ingest`` (or ``run``). For each sample it builds a Delaunay cell
 graph, computes k-hop cell-type composition features, trains one shared DGI
 encoder across the cohort, clusters the embeddings into recurring
-microenvironments, and writes per-cell CME labels.
+microenvironments, and writes per-cell niche labels.
 
-Outputs written to ``<results-dir>/`` (namespaced by ``--cme-mode``)::
+Outputs written to ``<results-dir>/`` (namespaced by ``--niche-mode``)::
 
-    cme-outputs-csv/cells/<id>.csv       celltype niches (cme_*; default)
-    cme-gex-outputs-csv/cells/<id>.csv   gene-expression niches (gexcme_*)
-    cme-hybrid-outputs-csv/cells/<id>.csv fused niches (hcme_*)
-    <subdir>/cmes/<id>.csv               annotation-level merged regions (--cme-regions)
+    niche-outputs-csv/cells/<id>.csv       celltype niches (niche_*; default)
+    niche-gex-outputs-csv/cells/<id>.csv   gene-expression niches (gexniche_*)
+    niche-hybrid-outputs-csv/cells/<id>.csv fused niches (hniche_*)
+    <subdir>/niches/<id>.csv               annotation-level merged regions (--niche-regions)
 
-The ``cme_0 .. cme_{K-1}`` one-hot columns in the cells CSV can be fed straight
+The ``niche_0 .. niche_{K-1}`` one-hot columns in the cells CSV can be fed straight
 into ``sptxinsight hplot`` as ``prob_`` columns to plot niche proportion over
 distance. Because each mode writes to its own folder/column prefix, cell-type and
 gene-expression niches coexist on the same cells and can be compared with
-``cme-profile``'s agreement report.
+``niche-profile``'s agreement report.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def _slide_paths_from_results(results_dir: URIPath):
     help="Results directory containing model-outputs-csv/ from a prior ingest.",
 )
 @click.option(
-    "--cme-clusters",
+    "--niche-clusters",
     default=None,
     type=click.IntRange(min=2),
     help=(
@@ -62,53 +62,53 @@ def _slide_paths_from_results(results_dir: URIPath):
     ),
 )
 @click.option(
-    "--cme-k-hops",
+    "--niche-k-hops",
     default=2,
     show_default=True,
     type=click.IntRange(min=0),
     help="Number of neighborhood hops for the composition features.",
 )
 @click.option(
-    "--cme-max-edge-len-um",
+    "--niche-max-edge-len-um",
     default=25.0,
     show_default=True,
     type=click.FloatRange(min=0),
     help="Maximal Delaunay edge length (um) when building the cell graph.",
 )
 @click.option(
-    "--cme-max-cell-radius-um",
+    "--niche-max-cell-radius-um",
     default=15.0,
     show_default=True,
     type=click.FloatRange(min=0),
     help="Maximal cell radius (um) used when merging annotation-level regions.",
 )
 @click.option(
-    "--cme-epochs",
+    "--niche-epochs",
     default=300,
     show_default=True,
     type=click.IntRange(min=1),
     help="DGI encoder training epochs.",
 )
 @click.option(
-    "--cme-soft",
+    "--niche-soft",
     is_flag=True,
     default=False,
     show_default=True,
     help="Use soft (probability) composition features instead of hard argmax labels.",
 )
 @click.option(
-    "--cme-mode",
+    "--niche-mode",
     default="celltype",
     show_default=True,
     type=click.Choice(["celltype", "expression", "both"]),
     help="Feature source for the niches and output namespace: 'celltype' "
-    "(k-hop cell-type composition -> cme-outputs-csv/, cme_ columns), "
-    "'expression' (k-hop mean gene expression -> cme-gex-outputs-csv/, "
-    "gexcme_ columns), or 'both' (fused -> cme-hybrid-outputs-csv/, "
-    "hcme_ columns). Modes write to separate folders so they coexist.",
+    "(k-hop cell-type composition -> niche-outputs-csv/, niche_ columns), "
+    "'expression' (k-hop mean gene expression -> niche-gex-outputs-csv/, "
+    "gexniche_ columns), or 'both' (fused -> niche-hybrid-outputs-csv/, "
+    "hniche_ columns). Modes write to separate folders so they coexist.",
 )
 @click.option(
-    "--cme-batch-correct",
+    "--niche-batch-correct",
     default="none",
     show_default=True,
     type=click.Choice(["none", "center", "harmony"]),
@@ -118,15 +118,15 @@ def _slide_paths_from_results(results_dir: URIPath):
     "(sample/run), never a biological condition, as the batch.",
 )
 @click.option(
-    "--cme-expression",
+    "--niche-expression",
     is_flag=True,
     default=False,
     show_default=True,
-    help="[deprecated] Alias for --cme-mode both (augment composition with "
-    "k-hop mean gene expression). Prefer --cme-mode.",
+    help="[deprecated] Alias for --niche-mode both (augment composition with "
+    "k-hop mean gene expression). Prefer --niche-mode.",
 )
 @click.option(
-    "--cme-pca-components",
+    "--niche-pca-components",
     default=50,
     show_default=True,
     type=click.IntRange(min=2),
@@ -144,7 +144,7 @@ def _slide_paths_from_results(results_dir: URIPath):
     "gene panel is high-dimensional and redundant.",
 )
 @click.option(
-    "--cme-regions",
+    "--niche-regions",
     is_flag=True,
     default=False,
     show_default=True,
@@ -156,155 +156,155 @@ def _slide_paths_from_results(results_dir: URIPath):
     is_flag=True,
     default=False,
     show_default=True,
-    help="Delete cached checkpoints and recompute all CME outputs from scratch.",
+    help="Delete cached checkpoints and recompute all niche outputs from scratch.",
 )
-def cme(
+def niche(
     *,
     results_dir: URIPath,
-    cme_clusters: int | None,
-    cme_k_hops: int,
-    cme_max_edge_len_um: float,
-    cme_max_cell_radius_um: float,
-    cme_epochs: int,
-    cme_soft: bool,
-    cme_mode: str,
-    cme_batch_correct: str,
-    cme_expression: bool,
-    cme_pca_components: int,
+    niche_clusters: int | None,
+    niche_k_hops: int,
+    niche_max_edge_len_um: float,
+    niche_max_cell_radius_um: float,
+    niche_epochs: int,
+    niche_soft: bool,
+    niche_mode: str,
+    niche_batch_correct: str,
+    niche_expression: bool,
+    niche_pca_components: int,
     disable_pca: bool,
-    cme_regions: bool,
+    niche_regions: bool,
     overwrite: bool,
 ) -> None:
-    """Discover cellular microenvironments (CMEs) across ingested samples."""
+    """Discover niches across ingested samples."""
     # Imported inside the callback (not at module import) so the heavy torch /
-    # torch_geometric stack is only loaded when CME analysis is actually run,
+    # torch_geometric stack is only loaded when niche analysis is actually run,
     # keeping `sptxinsight --help` and other subcommands fast.
-    from ..insightlib.cme_generation import _CME_MODE_SPEC
-    from ..insightlib.cme_generation import cme_generation
+    from ..insightlib.niche_generation import _NICHE_MODE_SPEC
+    from ..insightlib.niche_generation import niche_generation
 
-    # Backward-compat: --cme-expression is an alias for --cme-mode both.
-    if cme_expression and cme_mode == "celltype":
-        cme_mode = "both"
+    # Backward-compat: --niche-expression is an alias for --niche-mode both.
+    if niche_expression and niche_mode == "celltype":
+        niche_mode = "both"
 
     slide_paths, mpp_lookup = _slide_paths_from_results(results_dir)
 
-    click.secho("\nRunning cellular microenvironment (CME) analysis.\n", fg="green")
+    click.secho("\nRunning niche analysis.\n", fg="green")
 
-    cme_generation(
+    niche_generation(
         wsi_dir=None,
         wsi_paths=slide_paths,
         results_dir=str(results_dir),
-        max_edge_len_um=cme_max_edge_len_um,
-        max_cell_radius_um=cme_max_cell_radius_um,
-        k_hops=cme_k_hops,
+        max_edge_len_um=niche_max_edge_len_um,
+        max_cell_radius_um=niche_max_cell_radius_um,
+        k_hops=niche_k_hops,
         alpha=1.0,
         hidden=64,
         out_dim=32,
-        epochs=cme_epochs,
-        cme_cellular=True,
-        cme_annotation=cme_regions,
-        cme_clustering_k=cme_clusters,
-        cme_clustering_resolutions=[0.5, 1.0, 2.0],
-        cme_soft_mode=cme_soft,
-        cme_mode=cme_mode,
-        batch_correct=cme_batch_correct,
-        expression_pca=0 if disable_pca else cme_pca_components,
+        epochs=niche_epochs,
+        niche_cellular=True,
+        niche_annotation=niche_regions,
+        niche_clustering_k=niche_clusters,
+        niche_clustering_resolutions=[0.5, 1.0, 2.0],
+        niche_soft_mode=niche_soft,
+        niche_mode=niche_mode,
+        batch_correct=niche_batch_correct,
+        expression_pca=0 if disable_pca else niche_pca_components,
         overwrite=overwrite,
         slide_mpp_lookup=mpp_lookup,
     )
 
-    ncells = results_dir / _CME_MODE_SPEC[cme_mode]["subdir"] / "cells"
-    click.secho(f"\nCME analysis completed. Per-cell labels in {ncells}\n", fg="green")
+    ncells = results_dir / _NICHE_MODE_SPEC[niche_mode]["subdir"] / "cells"
+    click.secho(f"\nniche analysis completed. Per-cell labels in {ncells}\n", fg="green")
 
 
-@click.command(name="cme-profile")
+@click.command(name="niche-profile")
 @click.option(
     "-o",
     "--results-dir",
     type=URIPathType(exists=True, **_STORAGE_KWARGS),
     required=True,
-    help="Results directory containing cme-outputs-csv/cells/ from `sptxinsight cme`.",
+    help="Results directory containing niche-outputs-csv/cells/ from `sptxinsight niche`.",
 )
 @click.option(
-    "--cme-mode",
+    "--niche-mode",
     default="celltype",
     show_default=True,
     type=click.Choice(["celltype", "expression", "both"]),
-    help="Which niche family to profile (matches the `cme --cme-mode` run).",
+    help="Which niche family to profile (matches the `niche --niche-mode` run).",
 )
 @click.option(
     "--top-genes",
     default=10,
     show_default=True,
     type=click.IntRange(min=1),
-    help="Number of top enriched marker genes to report per CME.",
+    help="Number of top enriched marker genes to report per niche.",
 )
 @click.option(
     "--top-types",
     default=5,
     show_default=True,
     type=click.IntRange(min=1),
-    help="Number of top cell types to summarise per CME.",
+    help="Number of top cell types to summarise per niche.",
 )
 @click.option(
     "--agreement/--no-agreement",
     "agreement",
     default=None,
     help="Also report celltype-vs-gene niche agreement (NMI + cross-tab). "
-    "Default: auto when both cme-outputs-csv and cme-gex-outputs-csv exist.",
+    "Default: auto when both niche-outputs-csv and niche-gex-outputs-csv exist.",
 )
-def cme_profile_cmd(
+def niche_profile_cmd(
     *,
     results_dir: URIPath,
-    cme_mode: str,
+    niche_mode: str,
     top_genes: int,
     top_types: int,
     agreement: bool | None,
 ) -> None:
-    """Summarise each CME's cell composition and marker genes to help name niches."""
-    from ..insightlib.cme_profile import cme_agreement
-    from ..insightlib.cme_profile import cme_profile
+    """Summarise each niche's cell composition and marker genes to help name niches."""
+    from ..insightlib.niche_profile import niche_agreement
+    from ..insightlib.niche_profile import niche_profile
 
-    comp, markers = cme_profile(
+    comp, markers = niche_profile(
         str(results_dir),
         top_genes=top_genes,
         top_types=top_types,
         write=True,
-        mode=cme_mode,
+        mode=niche_mode,
     )
 
-    click.secho("\nCME composition (mean cell-type fractions):\n", fg="green")
+    click.secho("\nniche composition (mean cell-type fractions):\n", fg="green")
     cols = [c for c in ("n_cells", "frac", "top_types") if c in comp.columns]
     with pd.option_context("display.max_colwidth", 80, "display.width", 200):
         click.echo(comp[cols].to_string())
 
     if markers is not None:
-        click.secho("\nTop enriched marker genes per CME:\n", fg="green")
-        for cme_id, grp in markers.groupby("cme", sort=False):
+        click.secho("\nTop enriched marker genes per niche:\n", fg="green")
+        for niche_id, grp in markers.groupby("niche", sort=False):
             top = ", ".join(
                 f"{r.gene}({r.log2_enrichment:+.1f})" for r in grp.itertuples()
             )
-            click.echo(f"  {cme_id}: {top}")
+            click.echo(f"  {niche_id}: {top}")
     else:
         click.secho(
-            "\n(No expr_ columns found; run `sptxinsight cme` on gene-mode samples "
+            "\n(No expr_ columns found; run `sptxinsight niche` on gene-mode samples "
             "for marker-gene fingerprints.)\n",
             fg="yellow",
         )
 
     click.secho(
-        f"\nWrote cme-profile-composition*.csv (and markers, if any) to {results_dir}\n",
+        f"\nWrote niche-profile-composition*.csv (and markers, if any) to {results_dir}\n",
         fg="green",
     )
 
     # ---- celltype-vs-gene niche agreement (auto when both families exist) ----
     if agreement is not False:
-        result = cme_agreement(str(results_dir), write=True)
+        result = niche_agreement(str(results_dir), write=True)
         if result is None:
             if agreement is True:
                 click.secho(
-                    "\n(Agreement needs both cme-outputs-csv/ and cme-gex-outputs-csv/; "
-                    "run `cme --cme-mode celltype` and `cme --cme-mode expression` first.)\n",
+                    "\n(Agreement needs both niche-outputs-csv/ and niche-gex-outputs-csv/; "
+                    "run `niche --niche-mode celltype` and `niche --niche-mode expression` first.)\n",
                     fg="yellow",
                 )
         else:
@@ -317,4 +317,4 @@ def cme_profile_cmd(
             )
             with pd.option_context("display.width", 200):
                 click.echo(crosstab.to_string())
-            click.secho(f"\nWrote cme-agreement.csv to {results_dir}\n", fg="green")
+            click.secho(f"\nWrote niche-agreement.csv to {results_dir}\n", fg="green")

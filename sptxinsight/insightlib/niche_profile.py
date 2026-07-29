@@ -1,7 +1,7 @@
-"""Profile discovered CMEs (niches) so each ``cme_n`` can be named.
+"""Profile discovered niches so each ``niche_n`` can be named.
 
-Reads ``cme-outputs-csv/cells/<id>.csv`` produced by ``sptxinsight cme`` and, for
-each CME cluster, summarises:
+Reads ``niche-outputs-csv/cells/<id>.csv`` produced by ``sptxinsight niche`` and, for
+each niche cluster, summarises:
 
 * the mean cell-type composition (from ``prob_*`` columns), and
 * the most enriched marker genes (from ``expr_*`` columns, if present).
@@ -10,7 +10,7 @@ These two fingerprints let a human assign biological names (TLS, tumor nest,
 perivascular, ...) to the otherwise arbitrary cluster ids.
 
 This module deliberately depends only on numpy/pandas so it can be imported and
-run without the deep-learning ``[cme]`` extra.
+run without the deep-learning ``[niche]`` extra.
 """
 
 from __future__ import annotations
@@ -24,16 +24,16 @@ import numpy as np
 import pandas as pd
 
 # Mode -> (cells subdir, one-hot column prefix, output filename suffix). Kept in
-# sync with ``_CME_MODE_SPEC`` in cme_generation.py but defined locally so this
-# module stays free of the heavy deep-learning ``[cme]`` extra.
+# sync with ``_NICHE_MODE_SPEC`` in niche_generation.py but defined locally so this
+# module stays free of the heavy deep-learning ``[niche]`` extra.
 _MODE_SPEC = {
-    "celltype": ("cme-outputs-csv", "cme_", ""),
-    "expression": ("cme-gex-outputs-csv", "gexcme_", "-gex"),
-    "both": ("cme-hybrid-outputs-csv", "hcme_", "-hybrid"),
+    "celltype": ("niche-outputs-csv", "niche_", ""),
+    "expression": ("niche-gex-outputs-csv", "gexniche_", "-gex"),
+    "both": ("niche-hybrid-outputs-csv", "hniche_", "-hybrid"),
 }
 
 
-def _cme_columns(columns: List[str], prefix: str = "cme_") -> List[str]:
+def _niche_columns(columns: List[str], prefix: str = "niche_") -> List[str]:
     """Return ``<prefix>*`` columns ordered by their integer index."""
     cols = [c for c in columns if c.startswith(prefix)]
 
@@ -46,23 +46,23 @@ def _cme_columns(columns: List[str], prefix: str = "cme_") -> List[str]:
     return sorted(cols, key=_idx)
 
 
-def cme_profile(
+def niche_profile(
     results_dir: str | Path,
     top_genes: int = 10,
     top_types: int = 5,
     write: bool = True,
     mode: str = "celltype",
 ) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-    """Aggregate per-cell CME labels into per-cluster composition + marker tables.
+    """Aggregate per-cell niche labels into per-cluster composition + marker tables.
 
     ``mode`` selects which niche family to profile (``celltype`` ->
-    ``cme-outputs-csv``/``cme_``; ``expression`` -> ``cme-gex-outputs-csv``/
-    ``gexcme_``; ``both`` -> ``cme-hybrid-outputs-csv``/``hcme_``).
+    ``niche-outputs-csv``/``niche_``; ``expression`` -> ``niche-gex-outputs-csv``/
+    ``gexniche_``; ``both`` -> ``niche-hybrid-outputs-csv``/``hniche_``).
 
     Returns ``(composition_df, markers_df)``. ``markers_df`` is ``None`` when the
     cells CSVs carry no ``expr_`` columns. When ``write`` is True the tables are
-    saved to ``<results-dir>/cme-profile-composition<suffix>.csv`` and
-    ``<results-dir>/cme-profile-markers<suffix>.csv``.
+    saved to ``<results-dir>/niche-profile-composition<suffix>.csv`` and
+    ``<results-dir>/niche-profile-markers<suffix>.csv``.
     """
     if mode not in _MODE_SPEC:
         raise ValueError(f"mode must be one of {sorted(_MODE_SPEC)}, got {mode!r}")
@@ -73,29 +73,29 @@ def cme_profile(
     csvs = sorted(cells_dir.glob("*.csv"))
     if not csvs:
         raise FileNotFoundError(
-            f"No CME cell CSVs found under {cells_dir}. "
-            f"Run `sptxinsight cme --cme-mode {mode}` first."
+            f"No niche cell CSVs found under {cells_dir}. "
+            f"Run `sptxinsight niche --niche-mode {mode}` first."
         )
 
     head = pd.read_csv(csvs[0], nrows=1)
-    cme_cols = _cme_columns(list(head.columns), prefix)
-    if not cme_cols:
+    niche_cols = _niche_columns(list(head.columns), prefix)
+    if not niche_cols:
         raise ValueError(
             f"No {prefix} columns in {csvs[0]}; was this produced by "
-            f"`sptxinsight cme --cme-mode {mode}`?"
+            f"`sptxinsight niche --niche-mode {mode}`?"
         )
     prob_cols = [c for c in head.columns if c.startswith("prob_")]
     expr_cols = [c for c in head.columns if c.startswith("expr_")]
 
-    K = len(cme_cols)
+    K = len(niche_cols)
     counts = np.zeros(K, dtype=np.float64)
     sum_prob = np.zeros((K, len(prob_cols)), dtype=np.float64)
     sum_expr = np.zeros((K, len(expr_cols)), dtype=np.float64) if expr_cols else None
 
-    usecols = cme_cols + prob_cols + expr_cols
+    usecols = niche_cols + prob_cols + expr_cols
     for csv in csvs:
         df = pd.read_csv(csv, usecols=lambda c: c in usecols)
-        oh = df[cme_cols].fillna(0).to_numpy()
+        oh = df[niche_cols].fillna(0).to_numpy()
         assigned = oh.sum(axis=1) > 0
         if not assigned.any():
             continue
@@ -156,7 +156,7 @@ def cme_profile(
             for rank, gi in enumerate(order, start=1):
                 rows.append(
                     {
-                        "cme": f"{prefix}{k}",
+                        "niche": f"{prefix}{k}",
                         "rank": rank,
                         "gene": genes[gi],
                         "mean_expr": float(mean_expr[k, gi]),
@@ -166,10 +166,10 @@ def cme_profile(
         markers = pd.DataFrame(rows)
 
     if write:
-        comp.to_csv(results_dir / f"cme-profile-composition{suffix}.csv")
+        comp.to_csv(results_dir / f"niche-profile-composition{suffix}.csv")
         if markers is not None:
             markers.to_csv(
-                results_dir / f"cme-profile-markers{suffix}.csv", index=False
+                results_dir / f"niche-profile-markers{suffix}.csv", index=False
             )
 
     return comp, markers
@@ -194,23 +194,23 @@ def _nmi(a: np.ndarray, b: np.ndarray) -> float:
     return float(mi / denom) if denom > 0 else 0.0
 
 
-def cme_agreement(
+def niche_agreement(
     results_dir: str | Path,
     write: bool = True,
 ) -> Optional[Tuple[float, pd.DataFrame]]:
     """Compare cell-type niches against gene-expression niches on the same cells.
 
-    Requires both ``cme-outputs-csv/cells/`` (``cme_*``) and
-    ``cme-gex-outputs-csv/cells/`` (``gexcme_*``). For each shared sample the two
+    Requires both ``niche-outputs-csv/cells/`` (``niche_*``) and
+    ``niche-gex-outputs-csv/cells/`` (``gexniche_*``). For each shared sample the two
     label sets are aligned by row index (both derive from the same
     model-output CSV, so rows correspond), restricted to cells assigned in both,
     argmax-decoded, and pooled. Returns ``(nmi, crosstab)`` or ``None`` when one
     family is missing. With ``write`` the count crosstab is saved to
-    ``<results-dir>/cme-agreement.csv``.
+    ``<results-dir>/niche-agreement.csv``.
     """
     results_dir = Path(str(results_dir))
-    ct_dir = results_dir / "cme-outputs-csv" / "cells"
-    gx_dir = results_dir / "cme-gex-outputs-csv" / "cells"
+    ct_dir = results_dir / "niche-outputs-csv" / "cells"
+    gx_dir = results_dir / "niche-gex-outputs-csv" / "cells"
     if not ct_dir.exists() or not gx_dir.exists():
         return None
 
@@ -223,10 +223,10 @@ def cme_agreement(
     ct_chunks: List[np.ndarray] = []
     gx_chunks: List[np.ndarray] = []
     for name in common:
-        ct = pd.read_csv(ct_csvs[name], usecols=lambda c: c.startswith("cme_"))
-        gx = pd.read_csv(gx_csvs[name], usecols=lambda c: c.startswith("gexcme_"))
-        ct_cols = _cme_columns(list(ct.columns), "cme_")
-        gx_cols = _cme_columns(list(gx.columns), "gexcme_")
+        ct = pd.read_csv(ct_csvs[name], usecols=lambda c: c.startswith("niche_"))
+        gx = pd.read_csv(gx_csvs[name], usecols=lambda c: c.startswith("gexniche_"))
+        ct_cols = _niche_columns(list(ct.columns), "niche_")
+        gx_cols = _niche_columns(list(gx.columns), "gexniche_")
         if not ct_cols or not gx_cols:
             continue
         ct_oh = ct[ct_cols].fillna(0).to_numpy()
@@ -249,10 +249,10 @@ def cme_agreement(
         pd.Series(ct_lab, name="celltype_niche"),
         pd.Series(gx_lab, name="gene_niche"),
     )
-    crosstab.index = [f"cme_{i}" for i in crosstab.index]
-    crosstab.columns = [f"gexcme_{j}" for j in crosstab.columns]
+    crosstab.index = [f"niche_{i}" for i in crosstab.index]
+    crosstab.columns = [f"gexniche_{j}" for j in crosstab.columns]
 
     if write:
-        crosstab.to_csv(results_dir / "cme-agreement.csv")
+        crosstab.to_csv(results_dir / "niche-agreement.csv")
 
     return nmi, crosstab

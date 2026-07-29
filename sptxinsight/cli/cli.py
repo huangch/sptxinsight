@@ -15,8 +15,8 @@ import click
 from ..io import set_backend
 from .agg import agg
 from .cci import cci
-from .cme import cme
-from .cme import cme_profile_cmd
+from .niche import niche
+from .niche import niche_profile_cmd
 from .export import export
 from .hplot import hplot
 from .hplot import hplot_finalize_cmd
@@ -91,8 +91,8 @@ cli.add_command(verify)
 cli.add_command(export)
 cli.add_command(hplot)
 cli.add_command(hplot_finalize_cmd)
-cli.add_command(cme)
-cli.add_command(cme_profile_cmd)
+cli.add_command(niche)
+cli.add_command(niche_profile_cmd)
 cli.add_command(cci)
 cli.add_command(agg)
 

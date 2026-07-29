@@ -40,7 +40,7 @@ Optional extras
      - Same ``numpy>=2`` constraint.
    * - ``harmony``
      - ``harmonypy``
-     - Required for ``cme --cme-batch-correct harmony``.
+     - Required for ``niche --niche-batch-correct harmony``.
    * - ``mcp``
      - ``fastmcp>=2.0``
      - Model Context Protocol server.

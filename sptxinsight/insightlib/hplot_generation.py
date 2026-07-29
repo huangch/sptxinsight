@@ -44,14 +44,14 @@ _WORKER_STEPS = [
 ]
 _STEP_LABEL_W = 12  # pad postfix so tqdm bar geometry stays stable across steps
 
-# CME niche families selectable via --base-by/--target-by. Each maps a token to
+# niche families selectable via --base-by/--target-by. Each maps a token to
 # the one-hot column prefix (and, in the CLI, the cells subdir) produced by the
-# matching `sptxinsight cme --cme-mode` run.
-_CME_FAMILY_PREFIX = {"cme": "cme_", "cmegex": "gexcme_", "cmehybrid": "hcme_"}
-_CME_FAMILY_SUBDIR = {
-    "cme": "cme-outputs-csv/cells",
-    "cmegex": "cme-gex-outputs-csv/cells",
-    "cmehybrid": "cme-hybrid-outputs-csv/cells",
+# matching `sptxinsight niche --niche-mode` run.
+_NICHE_FAMILY_PREFIX = {"niche": "niche_", "nichegex": "gexniche_", "nichehybrid": "hniche_"}
+_NICHE_FAMILY_SUBDIR = {
+    "niche": "niche-outputs-csv/cells",
+    "nichegex": "niche-gex-outputs-csv/cells",
+    "nichehybrid": "niche-hybrid-outputs-csv/cells",
 }
 
 # Cell-cell interaction (CCI) axis. The continuous ``cci_*`` ligand-receptor
@@ -159,9 +159,9 @@ def _worker(
                 resolved.append(actual)
         return resolved
 
-    # CME one-hot columns (present only in cme*-outputs-csv/cells/<id>.csv). The
-    # active family is chosen by base_by/target_by (cme | cmegex | cmehybrid).
-    def _resolve_cmes(type_list: Sequence[str], prefix: str) -> list[str]:
+    # niche one-hot columns (present only in niche*-outputs-csv/cells/<id>.csv). The
+    # active family is chosen by base_by/target_by (niche | nichegex | nichehybrid).
+    def _resolve_niches(type_list: Sequence[str], prefix: str) -> list[str]:
         """Map niche ids ("2" or "<prefix>2") to actual columns, case-insensitively."""
         cols = [c for c in nodes_df.columns.to_list() if c.startswith(prefix)]
         lower_to_actual = {c.lower(): c for c in cols}
@@ -209,7 +209,7 @@ def _worker(
                 resolved.append(actual)
         return resolved
 
-    # ---- base membership: cell type (prob idxmax) OR gene (expr threshold) OR cme ----
+    # ---- base membership: cell type (prob idxmax) OR gene (expr threshold) OR niche ----
     if base_by == "gene":
         base_expr_cols = _resolve_genes(base_type_list)
         if not base_expr_cols:
@@ -224,19 +224,19 @@ def _worker(
         nodes_df["is_base_type"] = (
             nodes_df[base_expr_cols].mean(axis=1) > base_gene_threshold
         )
-    elif base_by in _CME_FAMILY_PREFIX:
-        base_prefix = _CME_FAMILY_PREFIX[base_by]
-        base_cme_cols = _resolve_cmes(base_type_list, base_prefix)
-        if not base_cme_cols:
+    elif base_by in _NICHE_FAMILY_PREFIX:
+        base_prefix = _NICHE_FAMILY_PREFIX[base_by]
+        base_niche_cols = _resolve_niches(base_type_list, base_prefix)
+        if not base_niche_cols:
             _logger.warning(
-                "[%s] None of the base CMEs %s matched %s columns. Skipping slide.",
+                "[%s] None of the base niches %s matched %s columns. Skipping slide.",
                 slide_id,
                 sorted(base_type_list),
                 base_prefix,
             )
             inner.close()
             return slide_id, None, None
-        nodes_df["is_base_type"] = nodes_df[base_cme_cols].fillna(0).max(axis=1) > 0
+        nodes_df["is_base_type"] = nodes_df[base_niche_cols].fillna(0).max(axis=1) > 0
     elif base_by == "cci":
         base_cci_cols = _resolve_cci(base_type_list)
         if not base_cci_cols:
@@ -276,7 +276,7 @@ def _worker(
             return slide_id, None, None
         nodes_df["is_base_type"] = predicted_labels.isin(base_targets)
 
-    # ---- target value: cell-type proportion OR mean gene expression OR cme proportion ----
+    # ---- target value: cell-type proportion OR mean gene expression OR niche proportion ----
     if target_by == "gene":
         target_expr_cols = _resolve_genes(target_type_list)
         if not target_expr_cols:
@@ -292,21 +292,21 @@ def _worker(
         nodes_df["target_value"] = target_value
         # Count of expressing cells (expr > 0) gives the per-layer "target_count".
         nodes_df["is_target_type"] = target_value > 0
-    elif target_by in _CME_FAMILY_PREFIX:
-        target_prefix = _CME_FAMILY_PREFIX[target_by]
-        target_cme_cols = _resolve_cmes(target_type_list, target_prefix)
-        if not target_cme_cols:
+    elif target_by in _NICHE_FAMILY_PREFIX:
+        target_prefix = _NICHE_FAMILY_PREFIX[target_by]
+        target_niche_cols = _resolve_niches(target_type_list, target_prefix)
+        if not target_niche_cols:
             _logger.warning(
-                "[%s] None of the target CMEs %s matched %s columns. Skipping slide.",
+                "[%s] None of the target niches %s matched %s columns. Skipping slide.",
                 slide_id,
                 sorted(target_type_list),
                 target_prefix,
             )
             inner.close()
             return slide_id, None, None
-        # One-hot membership: max over requested cme_ columns is 0/1 per cell, so
+        # One-hot membership: max over requested niche_ columns is 0/1 per cell, so
         # its per-layer mean is exactly the niche proportion.
-        target_value = nodes_df[target_cme_cols].fillna(0).max(axis=1)
+        target_value = nodes_df[target_niche_cols].fillna(0).max(axis=1)
         nodes_df["target_value"] = target_value
         nodes_df["is_target_type"] = target_value > 0
     elif target_by == "cci":

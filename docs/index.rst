@@ -1,8 +1,8 @@
 sptxinsight
 ===========
 
-Cell-typing, spatial-heterogeneity (H-Plot), and cellular-microenvironment
-(CME / niche) analysis for **spatial transcriptomics**, built as a lightweight
+Cell-typing, spatial-heterogeneity (H-Plot), and niche
+(niche / niche) analysis for **spatial transcriptomics**, built as a lightweight
 sibling of `WSInsight <https://github.com/huangch/wsinsight>`_.
 
 Where WSInsight ingests whole-slide images, ``sptxinsight`` ingests AnnData
@@ -20,7 +20,7 @@ microns. It reuses WSInsight's H-Plot engine (vendored under
    :caption: Contents
 
    installing
-   cme
+   niche
 
 Quick start
 -----------
@@ -38,7 +38,7 @@ Quick start
      --base-type tumor --target-type lymphocyte
 
 Each sample must provide ``adata.obsm["spatial"]`` (N×2 micron coordinates) and
-a categorical ``adata.obs["cell_type"]``. Gene-expression and CME workflows
+a categorical ``adata.obs["cell_type"]``. Gene-expression and niche workflows
 additionally use an expression matrix (``X``, ``raw``, or a named layer).
 
 Indices and tables

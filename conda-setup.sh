@@ -103,7 +103,7 @@ pip install "fsspec>=2023.1.0,<2026" "s3fs<2026" "gcsfs<2026" \
 
 # ── Optional extras (always install — both CLI entry points should work) ──────
 pip install "fastmcp>=2.0"       # sptxinsight-mcp server
-pip install "harmonypy>=0.0.9"   # --cme-batch-correct harmony
+pip install "harmonypy>=0.0.9"   # --niche-batch-correct harmony
 
 # ── Install sptxinsight itself ────────────────────────────────────────────────
 pip install -e "${SCRIPT_DIR}"
