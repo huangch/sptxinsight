@@ -54,7 +54,7 @@ pip install --no-deps -e .
 Optional extras: `zarr` (read `.zarr` in the shared env), `spatialdata` /
 `scanpy` (dedicated `numpy>=2` env), `mcp` (`fastmcp>=2.0` MCP server),
 `kurtorank` (enables KurtoRank-backed annotation such as `annotate`), `harmony`
-(`harmonypy`, for `--niche-batch-correct harmony`).
+(`harmonypy`, for `--batch-correct harmony`).
 
 For wsinsight-compatible installs, prefer one-shot resolution via
 `pip install -e '.[kurtorank]'` from the sptxinsight repo. This keeps
@@ -84,7 +84,8 @@ selects the sample loader; `--log-level` sets verbosity.
 | `niche` | Discover niches across ingested samples. |
 | `niche-profile` | Summarise each niche's cell composition and marker genes to name niches. |
 | `hplot`, `hplot-finalize` | Experimental; hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
-| `agg` | Experimental; detect cell-type aggregates (e.g. TLS) namespaced by `--agg-name`; hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
+| `cci` | Experimental; score per-cell ligand-receptor cell-cell interactions (`--d-max` / `--lambda`); hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
+| `agg` | Experimental; detect cell-type aggregates (e.g. TLS) namespaced by `--name`; hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
 
 Typical end-to-end run:
 
@@ -107,18 +108,18 @@ writes a one-hot `niche_<n>` label per cell. Run it **after** `ingest`/`run`.
 
 ```bash
 # Cell-type niches across all ingested samples:
-sptxinsight niche -o ./results --niche-clusters 8 --niche-k-hops 3
+sptxinsight niche -o ./results --clusters 8 --k-hops 3
 
 # Gene-expression niches (k-hop mean expression):
-sptxinsight niche -o ./results --niche-mode expression --niche-batch-correct center
+sptxinsight niche -o ./results --mode expression --batch-correct center
 
 # Feed every gene to the encoder instead of PCA-reduced expression:
-sptxinsight niche -o ./results --niche-mode expression --disable-pca
+sptxinsight niche -o ./results --mode expression --disable-pca
 ```
 
-`--niche-mode` selects what drives the niches and namespaces the outputs:
+`--mode` selects what drives the niches and namespaces the outputs:
 
-| `--niche-mode` | features | output folder | one-hot columns |
+| `--mode` | features | output folder | one-hot columns |
 | --- | --- | --- | --- |
 | `celltype` (default) | k-hop cell-type composition | `niche-outputs-csv/` | `niche_<n>` |
 | `expression` | k-hop mean gene expression (`expr_`) | `niche-gex-outputs-csv/` | `gexniche_<n>` |
@@ -131,7 +132,7 @@ cells; `celltype` stays byte-identical to earlier releases.
 
 For `expression` / `both` modes the per-cell gene panel is **reduced to a shared
 set of principal components before the k-hop aggregation** (default
-`--niche-pca-components 50`). The basis is fit **once on the pooled cohort** with
+`--pca-components 50`). The basis is fit **once on the pooled cohort** with
 an `IncrementalPCA` and applied identically to every sample, which:
 
 - denoises the sparse gene panel,
@@ -143,32 +144,32 @@ kept for `niche-profile` markers. The checkpoint files are tagged with the PCA
 setting (e.g. `slide-graphs-gex-pca50.joblib`) so toggling PCA never reuses a
 stale cache.
 
-- `--niche-pca-components N` — number of shared components (min 2; default 50).
+- `--pca-components N` — number of shared components (min 2; default 50).
   Effective dimension is `min(N, n_genes)`.
 - `--disable-pca` — feed all genes to the encoder instead (no reduction).
 
 ### 4.2 Other key options
 
-`--niche-clusters` (KMeans k; omit for an automatic Leiden sweep), `--niche-k-hops`,
-`--niche-max-edge-len-um`, `--niche-soft` (probability instead of argmax
-composition), `--niche-epochs` (upper bound on DGI training epochs — early stopping
-is always active, so training may finish sooner), `--niche-patience` (consecutive
-epochs without a mean-loss improvement > `--niche-min-delta` before stopping;
-default 20), `--niche-min-delta` (minimum relative improvement to reset patience;
-default 1e-4), `--niche-min-epochs` (never stop before this many epochs; default 50),
-`--niche-amp` (CUDA automatic mixed
+`--clusters` (KMeans k; omit for an automatic Leiden sweep), `--k-hops`,
+`--max-edge-len-um`, `--soft` (probability instead of argmax
+composition), `--epochs` (upper bound on DGI training epochs — early stopping
+is always active, so training may finish sooner), `--patience` (consecutive
+epochs without a mean-loss improvement > `--min-delta` before stopping;
+default 20), `--min-delta` (minimum relative improvement to reset patience;
+default 1e-4), `--min-epochs` (never stop before this many epochs; default 50),
+`--amp` (CUDA automatic mixed
 precision for DGI training — faster, lower GPU memory; off by default; no effect on
-CPU/MPS), `--niche-batch-correct` (`none`/`center`/`harmony` cross-sample
+CPU/MPS), `--batch-correct` (`none`/`center`/`harmony` cross-sample
 correction of the embeddings — use a **technical** unit such as sample/run as
-the batch, never a biological condition), `--niche-regions` (merge cells into
-annotation-level regions). `--niche-expression` is a deprecated alias for
-`--niche-mode both`.
+the batch, never a biological condition), `--regions` (merge cells into
+annotation-level regions). `--expression` is a deprecated alias for
+`--mode both`.
 
 ### 4.3 Naming niches
 
 ```bash
 sptxinsight niche-profile -o ./results --top-types 5 --top-genes 10
-sptxinsight niche-profile -o ./results --niche-mode expression
+sptxinsight niche-profile -o ./results --mode expression
 ```
 
 Writes `niche-profile-composition.csv` (mean cell-type fractions per niche) and,
@@ -198,8 +199,8 @@ results/
   model-outputs-csv/<id>.csv     # center_x, center_y, prob_<type>, expr_<gene> ...
   graphs/<id>.h5                 # cached Delaunay graph (shared across niche modes)
   slide-graphs-gex-pca50.joblib  # k-hop feature cache, tagged by mode + PCA setting
-  niche-outputs-csv/cells/<id>.csv     # per-cell niche_<n> labels (--niche-mode celltype)
-  niche-gex-outputs-csv/cells/<id>.csv # per-cell gexniche_<n> labels (--niche-mode expression)
+  niche-outputs-csv/cells/<id>.csv     # per-cell niche_<n> labels (--mode celltype)
+  niche-gex-outputs-csv/cells/<id>.csv # per-cell gexniche_<n> labels (--mode expression)
   niche-profile-composition.csv    # per-niche cell-type fractions (after niche-profile)
   niche-profile-markers.csv        # per-niche marker genes (gene-mode only)
   niche-agreement.csv              # celltype-vs-gene niche cross-tab (when both exist)

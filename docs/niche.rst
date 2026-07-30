@@ -11,25 +11,25 @@ clusters the embeddings, and writes a one-hot ``niche_<n>`` label per cell. Run 
 .. code-block:: bash
 
    # Cell-type niches across all ingested samples:
-   sptxinsight niche -o ./results --niche-clusters 8 --niche-k-hops 3
+   sptxinsight niche -o ./results --clusters 8 --k-hops 3
 
    # Gene-expression niches (k-hop mean expression):
-   sptxinsight niche -o ./results --niche-mode expression --niche-batch-correct center
+   sptxinsight niche -o ./results --mode expression --batch-correct center
 
    # Feed every gene to the encoder instead of PCA-reduced expression:
-   sptxinsight niche -o ./results --niche-mode expression --disable-pca
+   sptxinsight niche -o ./results --mode expression --disable-pca
 
 Modes
 -----
 
-``--niche-mode`` selects what drives the niches and namespaces the outputs so the
+``--mode`` selects what drives the niches and namespaces the outputs so the
 families coexist on the same cells:
 
 .. list-table::
    :header-rows: 1
    :widths: 18 32 25 25
 
-   * - ``--niche-mode``
+   * - ``--mode``
      - features
      - output folder
      - one-hot columns
@@ -54,7 +54,7 @@ Shared PCA of expression features (default on)
 
 For ``expression`` / ``both`` modes the per-cell gene panel is **reduced to a
 shared set of principal components before the k-hop aggregation** (default
-``--niche-pca-components 50``). The basis is fit **once on the pooled cohort** with
+``--pca-components 50``). The basis is fit **once on the pooled cohort** with
 an ``IncrementalPCA`` and applied identically to every sample, which:
 
 - denoises the sparse gene panel,
@@ -72,7 +72,7 @@ PCA never reuses a stale cache.
 
    * - Option
      - Effect
-   * - ``--niche-pca-components N``
+   * - ``--pca-components N``
      - Number of shared components (min 2; default 50). The effective dimension
        is ``min(N, n_genes)``.
    * - ``--disable-pca``
@@ -81,20 +81,20 @@ PCA never reuses a stale cache.
 Other key options
 ------------------
 
-``--niche-clusters`` (KMeans k; omit for an automatic Leiden sweep),
-``--niche-k-hops``, ``--niche-max-edge-len-um``, ``--niche-soft`` (probability instead
-of argmax composition), ``--niche-epochs`` (upper bound on DGI training epochs —
-early stopping is always active, so training may finish sooner), ``--niche-patience``
-(consecutive epochs without a mean-loss improvement greater than ``--niche-min-delta``
-before stopping; default 20), ``--niche-min-delta`` (minimum relative mean-loss
-improvement to reset patience; default 1e-4), ``--niche-min-epochs`` (never stop before
-this many epochs; default 50), ``--niche-amp`` (CUDA automatic mixed precision for DGI
+``--clusters`` (KMeans k; omit for an automatic Leiden sweep),
+``--k-hops``, ``--max-edge-len-um``, ``--soft`` (probability instead
+of argmax composition), ``--epochs`` (upper bound on DGI training epochs —
+early stopping is always active, so training may finish sooner), ``--patience``
+(consecutive epochs without a mean-loss improvement greater than ``--min-delta``
+before stopping; default 20), ``--min-delta`` (minimum relative mean-loss
+improvement to reset patience; default 1e-4), ``--min-epochs`` (never stop before
+this many epochs; default 50), ``--amp`` (CUDA automatic mixed precision for DGI
 training — faster, lower GPU memory; off by default; no effect on CPU/MPS),
-``--niche-batch-correct``
+``--batch-correct``
 (``none`` / ``center`` / ``harmony`` cross-sample correction of the embeddings — use
 a **technical** unit such as sample/run as the batch, never a biological condition),
-and ``--niche-regions`` (merge cells into annotation-level regions).
-``--niche-expression`` is a deprecated alias for ``--niche-mode both``.
+and ``--regions`` (merge cells into annotation-level regions).
+``--expression`` is a deprecated alias for ``--mode both``.
 
 Naming niches
 -------------
@@ -102,7 +102,7 @@ Naming niches
 .. code-block:: bash
 
    sptxinsight niche-profile -o ./results --top-types 5 --top-genes 10
-   sptxinsight niche-profile -o ./results --niche-mode expression
+   sptxinsight niche-profile -o ./results --mode expression
 
 This writes ``niche-profile-composition.csv`` (mean cell-type fractions per niche)
 and, when ``expr_`` columns are present, ``niche-profile-markers.csv``. When both

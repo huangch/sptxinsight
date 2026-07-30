@@ -89,43 +89,50 @@ def _slide_paths_from_results(
     help="Mean expression above which a cell counts as base (only for --base-by gene).",
 )
 @click.option(
-    "--hplot-max-neighbor-distance",
+    "--max-neighbor-distance",
+    "hplot_max_neighbor_distance",
     default=25.0,
     type=click.FloatRange(min=0),
     help="Maximal distance (um) to a neighboring cell.",
 )
 @click.option(
-    "--hplot-k",
+    "--k",
+    "hplot_k",
     default=2,
     type=click.IntRange(min=0),
     help="Maximal edge distance defining a cell's neighborhood.",
 )
 @click.option(
-    "--hplot-n",
+    "--n",
+    "hplot_n",
     default=8,
     type=click.IntRange(min=0),
     help="Minimal neighborhood size for region determination.",
 )
 @click.option(
-    "--hplot-r",
+    "--r",
+    "hplot_r",
     default=0.5,
     type=click.FloatRange(min=0, max=1),
     help="Minimal ratio of base cells in a neighborhood to include a cell.",
 )
 @click.option(
-    "--hplot-range-max",
+    "--range-max",
+    "hplot_range_max",
     default=None,
     type=click.IntRange(min=1),
     help="Maximal layer index toward OUTSIDE for the H-Plot window.",
 )
 @click.option(
-    "--hplot-range-min",
+    "--range-min",
+    "hplot_range_min",
     default=None,
     type=click.IntRange(max=0),
     help="Minimal layer index toward INSIDE for the H-Plot window.",
 )
 @click.option(
-    "--hplot-samples-with-valid-range-only",
+    "--samples-with-valid-range-only",
+    "hplot_samples_with_valid_range_only",
     is_flag=True,
     default=False,
     show_default=True,
@@ -166,7 +173,7 @@ def hplot(
     """Compute H-Plot layer curves from already-ingested model-output CSVs."""
     slide_paths, mpp_lookup = _slide_paths_from_results(results_dir)
     # niche one-hot columns live in the niche*-outputs-csv/cells/ folder of
-    # the matching --niche-mode run (a superset of model-outputs-csv that also
+    # the matching --mode run (a superset of model-outputs-csv that also
     # carries prob_/expr_ columns). Read from the right family folder whenever an
     # axis is a niche family; both niche axes must use the same family (one file).
     from ..insightlib.hplot_generation import _CCI_SUBDIR

@@ -6,12 +6,12 @@ graph, computes k-hop cell-type composition features, trains one shared DGI
 encoder across the cohort, clusters the embeddings into recurring
 microenvironments, and writes per-cell niche labels.
 
-Outputs written to ``<results-dir>/`` (namespaced by ``--niche-mode``)::
+Outputs written to ``<results-dir>/`` (namespaced by ``--mode``)::
 
     niche-outputs-csv/cells/<id>.csv       celltype niches (niche_*; default)
     niche-gex-outputs-csv/cells/<id>.csv   gene-expression niches (gexniche_*)
     niche-hybrid-outputs-csv/cells/<id>.csv fused niches (hniche_*)
-    <subdir>/niches/<id>.csv               annotation-level merged regions (--niche-regions)
+    <subdir>/niches/<id>.csv               annotation-level merged regions (--regions)
 
 The ``niche_0 .. niche_{K-1}`` one-hot columns in the cells CSV can be fed straight
 into ``sptxinsight hplot`` as ``prob_`` columns to plot niche proportion over
@@ -53,7 +53,8 @@ def _slide_paths_from_results(results_dir: URIPath):
     help="Results directory containing model-outputs-csv/ from a prior ingest.",
 )
 @click.option(
-    "--niche-clusters",
+    "--clusters",
+    "niche_clusters",
     default=None,
     type=click.IntRange(min=2),
     help=(
@@ -62,45 +63,51 @@ def _slide_paths_from_results(results_dir: URIPath):
     ),
 )
 @click.option(
-    "--niche-k-hops",
+    "--k-hops",
+    "niche_k_hops",
     default=2,
     show_default=True,
     type=click.IntRange(min=0),
     help="Number of neighborhood hops for the composition features.",
 )
 @click.option(
-    "--niche-max-edge-len-um",
+    "--max-edge-len-um",
+    "niche_max_edge_len_um",
     default=25.0,
     show_default=True,
     type=click.FloatRange(min=0),
     help="Maximal Delaunay edge length (um) when building the cell graph.",
 )
 @click.option(
-    "--niche-max-cell-radius-um",
+    "--max-cell-radius-um",
+    "niche_max_cell_radius_um",
     default=15.0,
     show_default=True,
     type=click.FloatRange(min=0),
     help="Maximal cell radius (um) used when merging annotation-level regions.",
 )
 @click.option(
-    "--niche-epochs",
+    "--epochs",
+    "niche_epochs",
     default=300,
     show_default=True,
     type=click.IntRange(min=1),
     help="Upper bound on DGI encoder training epochs.  Early stopping is always "
-    "active, so training may finish sooner (see --niche-patience, "
-    "--niche-min-delta and --niche-min-epochs).",
+    "active, so training may finish sooner (see --patience, "
+    "--min-delta and --min-epochs).",
 )
 @click.option(
-    "--niche-patience",
+    "--patience",
+    "niche_patience",
     default=20,
     show_default=True,
     type=click.IntRange(min=1),
     help="Early-stopping patience: stop after this many consecutive epochs "
-    "without a mean-loss improvement greater than --niche-min-delta.",
+    "without a mean-loss improvement greater than --min-delta.",
 )
 @click.option(
-    "--niche-min-delta",
+    "--min-delta",
+    "niche_min_delta",
     default=1e-4,
     show_default=True,
     type=click.FloatRange(min=0),
@@ -108,14 +115,16 @@ def _slide_paths_from_results(results_dir: URIPath):
     "early-stopping patience counter.",
 )
 @click.option(
-    "--niche-min-epochs",
+    "--min-epochs",
+    "niche_min_epochs",
     default=50,
     show_default=True,
     type=click.IntRange(min=1),
     help="Never trigger early stopping before this many epochs have elapsed.",
 )
 @click.option(
-    "--niche-amp",
+    "--amp",
+    "niche_amp",
     is_flag=True,
     default=False,
     show_default=True,
@@ -124,14 +133,16 @@ def _slide_paths_from_results(results_dir: URIPath):
     "changes results very slightly versus full FP32.",
 )
 @click.option(
-    "--niche-soft",
+    "--soft",
+    "niche_soft",
     is_flag=True,
     default=False,
     show_default=True,
     help="Use soft (probability) composition features instead of hard argmax labels.",
 )
 @click.option(
-    "--niche-mode",
+    "--mode",
+    "niche_mode",
     default="celltype",
     show_default=True,
     type=click.Choice(["celltype", "expression", "both"]),
@@ -142,7 +153,8 @@ def _slide_paths_from_results(results_dir: URIPath):
     "hniche_ columns). Modes write to separate folders so they coexist.",
 )
 @click.option(
-    "--niche-batch-correct",
+    "--batch-correct",
+    "niche_batch_correct",
     default="none",
     show_default=True,
     type=click.Choice(["none", "center", "harmony"]),
@@ -152,15 +164,17 @@ def _slide_paths_from_results(results_dir: URIPath):
     "(sample/run), never a biological condition, as the batch.",
 )
 @click.option(
-    "--niche-expression",
+    "--expression",
+    "niche_expression",
     is_flag=True,
     default=False,
     show_default=True,
-    help="[deprecated] Alias for --niche-mode both (augment composition with "
-    "k-hop mean gene expression). Prefer --niche-mode.",
+    help="[deprecated] Alias for --mode both (augment composition with "
+    "k-hop mean gene expression). Prefer --mode.",
 )
 @click.option(
-    "--niche-pca-components",
+    "--pca-components",
+    "niche_pca_components",
     default=50,
     show_default=True,
     type=click.IntRange(min=2),
@@ -178,7 +192,8 @@ def _slide_paths_from_results(results_dir: URIPath):
     "gene panel is high-dimensional and redundant.",
 )
 @click.option(
-    "--niche-regions",
+    "--regions",
+    "niche_regions",
     is_flag=True,
     default=False,
     show_default=True,
@@ -220,7 +235,7 @@ def niche(
     from ..insightlib.niche_generation import _NICHE_MODE_SPEC
     from ..insightlib.niche_generation import niche_generation
 
-    # Backward-compat: --niche-expression is an alias for --niche-mode both.
+    # Backward-compat: --expression is an alias for --mode both.
     if niche_expression and niche_mode == "celltype":
         niche_mode = "both"
 
@@ -268,11 +283,12 @@ def niche(
     help="Results directory containing niche-outputs-csv/cells/ from `sptxinsight niche`.",
 )
 @click.option(
-    "--niche-mode",
+    "--mode",
+    "niche_mode",
     default="celltype",
     show_default=True,
     type=click.Choice(["celltype", "expression", "both"]),
-    help="Which niche family to profile (matches the `niche --niche-mode` run).",
+    help="Which niche family to profile (matches the `niche --mode` run).",
 )
 @click.option(
     "--top-genes",
@@ -346,7 +362,7 @@ def niche_profile_cmd(
             if agreement is True:
                 click.secho(
                     "\n(Agreement needs both niche-outputs-csv/ and niche-gex-outputs-csv/; "
-                    "run `niche --niche-mode celltype` and `niche --niche-mode expression` first.)\n",
+                    "run `niche --mode celltype` and `niche --mode expression` first.)\n",
                     fg="yellow",
                 )
         else:
