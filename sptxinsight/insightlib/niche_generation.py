@@ -51,7 +51,6 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score
 from sklearn.metrics import silhouette_score
 from sklearn.neighbors import kneighbors_graph
-from sklearn.preprocessing import StandardScaler
 from torch_geometric.data import Data
 from torch_geometric.loader import DataListLoader
 from torch_geometric.loader import DataLoader as GeoDataLoader
@@ -329,8 +328,7 @@ def khop_mean_features(
       - h>=1 : mean of V over the EXACT-hop-h neighbor ring (empty ring -> 0).
 
     Unlike :func:`khop_features` (composition probabilities) there is no
-    simplex/Laplace smoothing; raw means are kept and rescaled later by the
-    global ``StandardScaler``.
+    simplex/Laplace smoothing; raw means are kept as-is.
     """
     N_nodes, G = V.shape
     assert N_nodes == N, "V and N mismatch"
@@ -427,6 +425,11 @@ def train_dgi_multi(slides, hidden=64, out_dim=32, epochs=300, lr=1e-3, wd=1e-4,
                     early_stop_patience=20, early_stop_min_delta=1e-4,
                     early_stop_min_epochs=50):
     """Train a shared DGI encoder across sample graphs and return embeddings.
+
+    The encoder consumes the raw k-hop feature matrix ``s["X"]`` directly: the
+    composition blocks are already proportions on a common [0, 1] scale, and
+    keeping them untransformed means a given neighbourhood maps to the same
+    input regardless of which samples shared the run.
 
     ``amp`` enables CUDA automatic mixed precision (no-op on CPU/MPS).  Early
     stopping is always active: ``epochs`` is the upper bound, and training stops
@@ -1263,12 +1266,6 @@ def niche_generation(
             if classes is None:
                 classes = s["classes"]
 
-        # Global z-score over concatenated features (consistent scale across samples)
-        X_all = np.vstack([s["X"] for s in slides]).astype(np.float32)
-        scaler = StandardScaler(with_mean=True, with_std=True).fit(X_all)
-        for s in slides:
-            s["X_normalized"] = scaler.transform(s["X"]).astype(np.float32)
-
         joblib.dump(slides, niche_slide_graph_file, compress=3)
 
     # ---- Phase 2/5: shared DGI encoder + embeddings ------------------------
@@ -1347,15 +1344,6 @@ def niche_generation(
 
             slide_classes = slides[i]["classes"]
             slide_genes = slides[i].get("genes", [])
-            feature_normalized_cols = [
-                f"feature_normalized_k{k}_{c.replace('prob_', '')}"
-                for k in range(k_hops + 1)
-                for c in slide_classes
-            ] + [
-                f"feature_normalized_k{k}_expr_{g}"
-                for k in range(k_hops + 1)
-                for g in slide_genes
-            ]
             feature_cols = [
                 f"feature_raw_k{k}_{c.replace('prob_', '')}"
                 for k in range(k_hops + 1)
@@ -1365,9 +1353,6 @@ def niche_generation(
                 for k in range(k_hops + 1)
                 for g in slide_genes
             ]
-            niche_detection_df.loc[
-                slides[i]["kept_idx"], feature_normalized_cols
-            ] = slides[i]["X_normalized"]
             niche_detection_df.loc[slides[i]["kept_idx"], feature_cols] = slides[i]["X"]
             niche_cols = [
                 f"{mode_spec['prefix']}_{idx}" for idx in range(niche_clustering_k)
