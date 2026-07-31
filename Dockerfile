@@ -67,7 +67,7 @@ RUN pip install --retries 10 "numpy<2" torch torchvision torch_geometric
 # ------------------------------------
 WORKDIR /app/sptxinsight
 COPY . .
-RUN pip install --retries 10 "scanpy<1.11" "numpy<2" ".[mcp,zarr,harmony]" && \
+RUN pip install --retries 10 "scanpy<1.11" "scikit-misc>=0.3" "numpy<2" ".[mcp,zarr,harmony]" && \
     pip install --retries 10 "numpy<2"
 
 # ------------------------------------

@@ -38,7 +38,7 @@ Optional extras (see `pyproject.toml` for compatibility caveats):
 | `spatialdata` | `spatialdata` | Needs `numpy>=2`/`zarr>=3` — dedicated env only. |
 | `scanpy` | `scanpy` | Same `numpy>=2` constraint. |
 | `mcp` | `fastmcp>=2.0` | Model Context Protocol server. |
-| `kurtorank` | `kurtorank>=3.1.0` | Enables KurtoRank-backed annotation command(s), such as `annotate`. |
+| `kurtorank` | `kurtorank>=3.1.0`, `scikit-misc>=0.3` | Enables KurtoRank-backed annotation command(s), such as `annotate`. |
 
 ## CLI
 

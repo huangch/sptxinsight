@@ -45,7 +45,7 @@ Optional extras
      - ``fastmcp>=2.0``
      - Model Context Protocol server.
    * - ``kurtorank``
-     - ``kurtorank>=3.1.0``
+     - ``kurtorank>=3.1.0``, ``scikit-misc>=0.3``
      - Enables KurtoRank-backed annotation commands (for example ``annotate``).
 
 Install with KurtoRank-powered annotation enabled:

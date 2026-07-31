@@ -87,6 +87,8 @@ pip install scipy pandas h5py tqdm click
 # requirement. zarr<3 keeps anndata zarr-readers compatible with wsinsight.
 pip install "anndata>=0.12,<0.13" "scanpy<1.11" "zarr<3"
 pip install scikit-learn joblib
+# Optional Scanpy dependency used by some HVG flavors (e.g., seurat_v3).
+pip install "scikit-misc>=0.3"
 
 # ── Geometry / GIS — pyogrio as OGR backend (no GDAL binary required) ─────────
 pip install pyogrio shapely geopandas
