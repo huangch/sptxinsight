@@ -1,4 +1,4 @@
-"""Top-level Click group wiring sptxinsight's ingest, annotate, verify, and run commands."""
+"""Top-level Click group wiring sptxinsight's annotate, verify, and run commands."""
 
 from __future__ import annotations
 
@@ -20,9 +20,14 @@ from .niche import niche_profile_cmd
 from .export import export
 from .hplot import hplot
 from .hplot import hplot_finalize_cmd
-from .ingest import ingest
 from .run import run
 from .verify import verify
+# NOTE: `ingest` is intentionally not registered as a CLI command.
+# Use `wsinsight import --platform xenium-h5ad` instead, which natively
+# reads sptxinsight annotated.h5ad files without requiring an intermediate
+# model-outputs-csv conversion step.
+# The ingest module is kept for internal/legacy use only.
+# from .ingest import ingest
 
 _logging_levels = ["debug", "info", "warning", "error", "critical"]
 
@@ -78,7 +83,8 @@ def cli(
 
 
 cli.add_command(run)
-cli.add_command(ingest)
+# ingest is disabled — use `wsinsight import --platform xenium-h5ad` instead.
+# cli.add_command(ingest)
 if _kurtorank_enabled():
     from .annotate import annotate
     from .marker_init import marker_init
