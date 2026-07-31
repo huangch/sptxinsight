@@ -102,6 +102,11 @@ For `annotate`, pass the **exact** Xenium directory that contains files like
 explicitly. When `--markers-csv` is omitted, the command uses Kurtorank's
 bundled default panel (`markers-v6.csv`).
 
+Immune marker inclusion is configurable: `--include-immune` (default) adds
+shared `immune` / `circulating` marker rows alongside the selected
+`--tissue-type`; `--no-include-immune` restricts annotation to the selected
+tissue only.
+
 ---
 
 ## 4. Niches (niche / niches)

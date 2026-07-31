@@ -25,6 +25,7 @@ class AnnotateConfig:
     markers_csv: Path | None = None
     common_only: bool = True
     normal_only: bool = False
+    include_immune: bool = True
     use_graphclust: bool = True
     chosen_leiden_res: float = 0.5
     min_genes: int = 10
@@ -91,6 +92,10 @@ def _load_anndata_sample(sample_path: URIPath) -> ad.AnnData:
 
 def _configure_runtime() -> None:
     """Match KurtoRank CLI runtime safeguards for process and BLAS behavior."""
+    os.environ.setdefault(
+        "PYTHONWARNINGS",
+        "ignore:.*__version__.*anndata.*:FutureWarning",
+    )
     os.environ.setdefault("OMP_NUM_THREADS", "1")
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
     os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -159,6 +164,7 @@ def _run_kurtorank_annotate_xenium(
 
     args.append("--common-only" if config.common_only else "--no-common-only")
     args.append("--normal-only" if config.normal_only else "--include-cancer")
+    args.append("--include-immune" if config.include_immune else "--no-include-immune")
     args.append("--use-graphclust" if config.use_graphclust else "--use-leiden")
     args.append(
         "--allow-cuda-parallel" if config.allow_cuda_parallel else "--no-allow-cuda-parallel"

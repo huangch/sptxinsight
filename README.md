@@ -90,6 +90,11 @@ It does **not** auto-append `/outs`. If your Xenium data live in
 When `--markers-csv` is omitted, annotation uses Kurtorank's bundled default
 marker panel, which is now `markers-v6.csv`.
 
+Immune marker inclusion is configurable: use `--include-immune` (default) to
+add shared `immune` / `circulating` marker rows alongside the chosen
+`--tissue-type`, or `--no-include-immune` to restrict annotation to markers
+from the selected tissue only.
+
 ### Example
 
 ```bash
