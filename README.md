@@ -53,7 +53,7 @@ selects the sample loader and `--log-level` sets logging verbosity.
 |---|---|
 | `run` | Ingest → adapt → H-Plot, end to end. |
 | `ingest` | Read samples and write the per-sample H-Plot CSV contract. |
-| `annotate` | Run KurtoRank cell-type annotation (Xenium dirs and AnnData inputs). Requires installing `sptxinsight[kurtorank]`; hidden otherwise. |
+| `annotate` | Run KurtoRank cell-type annotation (exact Xenium data directories and AnnData inputs). Requires installing `sptxinsight[kurtorank]`; hidden otherwise. |
 | `marker-init` | Build a skeleton marker panel from DISCO atlases (KurtoRank wrapper). Requires installing `sptxinsight[kurtorank]`; hidden otherwise. |
 | `marker-rerank` | Rerank marker genes against CELLxGENE Census (KurtoRank wrapper). Requires installing `sptxinsight[kurtorank]`; hidden otherwise. |
 | `verify` | Verify samples are cell-typed and report per-type counts. |
@@ -75,6 +75,20 @@ For wsinsight compatibility, install via the command above (single resolver
 pass) instead of installing `kurtorank` standalone first. The extra pins
 `numpy<2` and the spatial stack (`zarr<3`, `spatialdata/squidpy` caps) so the
 environment remains co-installable with wsinsight.
+
+### Annotation Inputs
+
+`sptxinsight annotate` accepts either:
+
+- an exact Xenium directory containing files such as `cell_by_feature_matrix.h5`
+  and `cells.csv.gz`
+- or AnnData inputs (`.h5ad`, `.zarr`, or an `sptx-list://` manifest)
+
+It does **not** auto-append `/outs`. If your Xenium data live in
+`sample/outs/`, pass `-i sample/outs` explicitly.
+
+When `--markers-csv` is omitted, annotation uses Kurtorank's bundled default
+marker panel, which is now `markers-v6.csv`.
 
 ### Example
 

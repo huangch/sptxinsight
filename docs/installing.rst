@@ -54,6 +54,21 @@ Install with KurtoRank-powered annotation enabled:
 
    pip install -e '.[kurtorank]'
 
+Annotation input behavior
+-------------------------
+
+``sptxinsight annotate`` accepts either:
+
+* an exact Xenium directory containing files such as
+  ``cell_by_feature_matrix.h5`` and ``cells.csv.gz``
+* or AnnData inputs (``.h5ad``, ``.zarr``, or an ``sptx-list://`` manifest)
+
+It does **not** auto-append ``/outs``. If your Xenium export lives in
+``sample/outs/``, pass ``-i sample/outs`` explicitly.
+
+When ``--markers-csv`` is omitted, the annotation path uses Kurtorank's bundled
+default panel, ``markers-v6.csv``.
+
 Building these docs
 -------------------
 

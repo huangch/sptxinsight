@@ -52,10 +52,8 @@ def _mode_from_uri(input_path: URIPath) -> str:
     if p.is_file() and p.suffix.lower() in {".h5ad", ".zarr"}:
         return "anndata"
     if p.is_dir():
-        signatures = ("cell_by_feature_matrix.h5", "cells.csv.gz")
-        if all((p / s).exists() for s in signatures) or all(
-            ((p / "outs") / s).exists() for s in signatures
-        ):
+        matrix_candidates = ("cell_by_feature_matrix.h5", "cell_feature_matrix.h5")
+        if any((p / s).exists() for s in matrix_candidates) and (p / "cells.csv.gz").exists():
             return "xenium"
         if any(child.suffix.lower() in {".h5ad", ".zarr"} for child in p.iterdir()):
             return "anndata"
@@ -63,15 +61,8 @@ def _mode_from_uri(input_path: URIPath) -> str:
 
 
 def _resolve_xenium_dir(input_path: URIPath) -> Path:
-    """Return the effective Xenium outs directory for a local input path."""
-    xenium_dir = Path(input_path.local_path())
-    required = ("cell_by_feature_matrix.h5", "cells.csv.gz")
-    if all((xenium_dir / s).exists() for s in required):
-        return xenium_dir
-    outs = xenium_dir / "outs"
-    if outs.is_dir() and all((outs / s).exists() for s in required):
-        return outs
-    return xenium_dir
+    """Return the exact Xenium directory supplied by the caller."""
+    return Path(input_path.local_path())
 
 
 def _collect_anndata_samples(input_path: URIPath) -> list[URIPath]:
@@ -286,7 +277,7 @@ def run_kurtorank_annotate_input(
     if mode == "unsupported":
         raise click.ClickException(
             "Unsupported input for sptxinsight annotate. Provide a local Xenium "
-            "outs directory (or project directory containing outs/) or an AnnData "
+            "directory containing Xenium output files directly, or an AnnData "
             "file / directory."
         )
 

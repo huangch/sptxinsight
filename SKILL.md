@@ -75,7 +75,7 @@ selects the sample loader; `--log-level` sets verbosity.
 |---|---|
 | `run` | Ingest → adapt → H-Plot, end to end. |
 | `ingest` | Read samples and write the per-sample H-Plot CSV contract. |
-| `annotate` | Run KurtoRank cell-type annotation (Xenium dirs and AnnData inputs). Requires `sptxinsight[kurtorank]`; hidden otherwise. |
+| `annotate` | Run KurtoRank cell-type annotation (exact Xenium data directories and AnnData inputs). Requires `sptxinsight[kurtorank]`; hidden otherwise. |
 | `marker-init` | Build a skeleton marker panel from DISCO atlases (KurtoRank wrapper). Requires `sptxinsight[kurtorank]`; hidden otherwise. |
 | `marker-rerank` | Rerank marker genes against CELLxGENE Census (KurtoRank wrapper). Requires `sptxinsight[kurtorank]`; hidden otherwise. |
 | `verify` | Verify samples are cell-typed and report per-type counts. |
@@ -95,6 +95,12 @@ sptxinsight run \
   -o ./results \                      # local dir or s3://bucket/prefix
   --base-type tumor --target-type lymphocyte
 ```
+
+For `annotate`, pass the **exact** Xenium directory that contains files like
+`cell_by_feature_matrix.h5` and `cells.csv.gz`. The command no longer rewrites
+`-i sample` to `sample/outs`; if your data are under `outs/`, pass that path
+explicitly. When `--markers-csv` is omitted, the command uses Kurtorank's
+bundled default panel (`markers-v6.csv`).
 
 ---
 

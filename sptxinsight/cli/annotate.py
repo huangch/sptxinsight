@@ -28,8 +28,8 @@ _input_output_options = _apply_options(
         "--input-path",
         type=URIPathType(exists=True, **_STORAGE_KWARGS),
         required=True,
-        help="Input dataset root. Supports local Xenium outs directories (or "
-        "project directories containing outs/) and AnnData inputs "
+        help="Input dataset root. Supports local Xenium directories containing "
+        "the output files directly, and AnnData inputs "
         "(.h5ad/.zarr directory or sptx-list manifest).",
     ),
     click.option(

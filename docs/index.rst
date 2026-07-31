@@ -32,6 +32,8 @@ Quick start
    # or, inside the shared wsinsight conda env:
    pip install --no-deps -e .
 
+   # annotate expects the exact Xenium data directory; it does not append /outs
+
    sptxinsight run \
      -i ./samples \
      -o ./results \
