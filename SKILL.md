@@ -51,9 +51,10 @@ WSInsight depends on:
 pip install --no-deps -e .
 ```
 
-Optional extras: `zarr` (read `.zarr` in the shared env), `spatialdata` /
-`scanpy` (dedicated `numpy>=2` env), `mcp` (`fastmcp>=2.0` MCP server),
-`kurtorank` (enables KurtoRank-backed annotation such as `annotate`), `harmony`
+Optional extras: `zarr` (read `.zarr` in the shared env), `spatialdata`
+(dedicated `numpy>=2` env), `scanpy` (backward-compatible alias; already a
+core dependency), `mcp` (`fastmcp>=2.0` MCP server), `kurtorank` (enables
+KurtoRank-backed annotation such as `annotate`), `harmony`
 (`harmonypy`, for `--batch-correct harmony`).
 
 For wsinsight-compatible installs, prefer one-shot resolution via

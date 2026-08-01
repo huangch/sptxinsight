@@ -37,7 +37,7 @@ Optional extras
      - Needs ``numpy>=2`` / ``zarr>=3`` — dedicated env only.
    * - ``scanpy``
      - ``scanpy``
-     - Same ``numpy>=2`` constraint.
+     - Backward-compatible alias; ``scanpy<1.11`` is already a core dependency.
    * - ``harmony``
      - ``harmonypy``
      - Required for ``niche --batch-correct harmony``.

@@ -36,7 +36,7 @@ Optional extras (see `pyproject.toml` for compatibility caveats):
 |---|---|---|
 | `zarr` | `zarr<3` | Read `.zarr` samples in the shared env. |
 | `spatialdata` | `spatialdata` | Needs `numpy>=2`/`zarr>=3` — dedicated env only. |
-| `scanpy` | `scanpy` | Same `numpy>=2` constraint. |
+| `scanpy` | `scanpy` | Backward-compatible alias; scanpy is already a core dependency (`scanpy<1.11`). |
 | `mcp` | `fastmcp>=2.0` | Model Context Protocol server. |
 | `kurtorank` | `kurtorank>=3.1.0`, `scikit-misc>=0.3` | Enables KurtoRank-backed annotation command(s), such as `annotate`. |
 

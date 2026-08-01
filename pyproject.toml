@@ -40,11 +40,11 @@ classifiers = [
 # prefer:  pip install --no-deps -e .   (every runtime dep is already present).
 dependencies = [
   "click>=8.0,<9,!=8.1.4,!=8.1.5",
-  # anndata pinned to the same range as wsinsight (<0.11) to allow co-installation
-  # in the shared wsinsight conda env. If sptxinsight must read h5ad files written
-  # by tools using anndata 0.12 format (IORegistryError on encoding_type='null'),
-  # revert this to anndata>=0.12,<0.13 and run sptxinsight in a separate env.
-  "anndata>=0.9,<0.11",
+  # Standalone sptxinsight baseline: anndata 0.12.x is needed to read
+  # 0.12-format h5ad files (older anndata raises IORegistryError on
+  # encoding_type='null'). In the shared wsinsight env, install with
+  # --no-deps to avoid dependency upgrades.
+  "anndata>=0.12,<0.13",
   "scanpy<1.11",
   "numpy<2.0.0",
   "pandas>=2.0",
