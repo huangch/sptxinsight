@@ -67,7 +67,8 @@ RUN pip install --retries 10 "numpy<2" torch torchvision torch_geometric
 # ------------------------------------
 WORKDIR /app/sptxinsight
 COPY . .
-RUN pip install --retries 10 "scanpy<1.11" "scikit-misc>=0.3" "numpy<2" ".[mcp,zarr,harmony]" && \
+RUN pip install --retries 10 -c /app/sptxinsight/constraints.txt \
+        "numpy<2" ".[mcp,zarr,harmony]" && \
     pip install --retries 10 "numpy<2"
 
 # ------------------------------------
@@ -82,6 +83,12 @@ print("sptxinsight:", getattr(sptxinsight, "__version__", "?"),
       "Torch:", torch.__version__, "CUDA:", torch.version.cuda,
       "GPU?", torch.cuda.is_available(), "MCP:", type(m).__name__)
 PY
+
+# Fail the build if the console scripts were not installed. Without this the
+# image can ship with an importable package but no `sptxinsight` on PATH.
+RUN command -v sptxinsight && \
+    command -v sptxinsight-mcp && \
+    sptxinsight --help > /dev/null
 
 # ------------------------------------
 # Non-root user

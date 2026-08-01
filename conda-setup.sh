@@ -77,38 +77,16 @@ export PIP_CACHE_DIR=/tmp/pip-cache-sptxinsight
 
 pip install "numpy<2"
 
-# ── Torch stack (heaviest; download first) ────────────────────────────────────
-pip install torch torchvision torch-geometric
+# ── Install all sptxinsight dependencies declared in pyproject.toml ───────────
+# Installs torch, torchvision, torch_geometric, scanpy, anndata, geopandas,
+# aiobotocore, boto3, fsspec, s3fs, gcsfs, igraph, leidenalg, etc.
+# zarr<3 and harmonypy are installed via [zarr,harmony] extras below.
+pip install -c "${SCRIPT_DIR}/constraints.txt" -e "${SCRIPT_DIR}[zarr,harmony]"
 
-# ── Core scientific / bioinformatics stack ────────────────────────────────────
-pip install scipy pandas h5py tqdm click
-# Pin anndata/scanpy to the last numpy<2-compatible line. anndata>=0.12 reads
-# the 0.12-format h5ad written by wsinsight; scanpy<1.11 avoids the numpy>=2
-# requirement. zarr<3 keeps anndata zarr-readers compatible with wsinsight.
-pip install "anndata>=0.12,<0.13" "scanpy<1.11" "zarr<3"
-pip install scikit-learn joblib
-# Optional Scanpy dependency used by some HVG flavors (e.g., seurat_v3).
-pip install "scikit-misc>=0.3"
-
-# ── Geometry / GIS — pyogrio as OGR backend (no GDAL binary required) ─────────
-pip install pyogrio shapely geopandas
-
-# ── Graph clustering ──────────────────────────────────────────────────────────
-pip install igraph leidenalg pynndescent
-
-# ── Cloud I/O (version-capped to stay compatible with wsinsight's zarr<3 stack)
-# Pre-install aiobotocore + boto3 with explicit compatible versions to avoid
-# pip spending minutes backtracking through 90+ boto3 versions.
-pip install "aiobotocore>=2.5.4,<3.0.0" "boto3>=1.41,<1.42"
-pip install "fsspec>=2023.1.0,<2026" "s3fs<2026" "gcsfs<2026" \
-    requests platformdirs
-
-# ── Optional extras (always install — both CLI entry points should work) ──────
-pip install "fastmcp>=2.0"       # sptxinsight-mcp server
-pip install "harmonypy>=0.0.9"   # --niche-batch-correct harmony
-
-# ── Install sptxinsight itself ────────────────────────────────────────────────
-pip install -e "${SCRIPT_DIR}"
+# ── MCP server (fastmcp) ──────────────────────────────────────────────────────
+# Installed separately to avoid entangling fastmcp's jaraco.* dep chain with
+# the main sptxinsight resolution. Version pins are in constraints.txt.
+pip install fastmcp
 
 # ── Safety checks ─────────────────────────────────────────────────────────────
 python -c "

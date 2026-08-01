@@ -1,0 +1,30 @@
+# constraints.txt for sptxinsight
+#
+# Provides version pins that prevent pip from scanning many candidate versions
+# during dependency resolution (slow metadata fetches).
+#
+# HOW TO UPDATE: after a successful install run:
+#   pip freeze | grep -E "boto3|aiobotocore|botocore|google-|zarr|anndata|scanpy|numpy|fsspec"
+# and replace the ranges below with the exact resolved ==X.Y.Z pins.
+#
+# Ranges here are "good enough" to bound the search space; exact pins are
+# faster but require a known-working install to capture.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Core numpy<2 stack — must be kept in sync with pyproject.toml bounds
+numpy<2.0.0
+anndata<0.13           # 0.13+ requires zarr>=3 which requires numpy>=2
+zarr<3                 # zarr 3.x requires numpy>=2
+
+# boto3 / aiobotocore — pip otherwise scans 90+ versions of boto3
+# Replace with exact ==X.Y.Z after running pip freeze
+boto3>=1.41,<1.42
+aiobotocore>=2.5.4,<3.0.0
+
+# fsspec family
+fsspec>=2023.1.0,<2026
+s3fs<2026
+gcsfs<2026
+
+# scanpy — pin to last numpy<2-compatible release
+scanpy<1.11

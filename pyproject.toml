@@ -40,9 +40,11 @@ classifiers = [
 # prefer:  pip install --no-deps -e .   (every runtime dep is already present).
 dependencies = [
   "click>=8.0,<9,!=8.1.4,!=8.1.5",
-  # anndata>=0.12 is required to read 0.12-format annotated.h5ad (older versions
-  # raise IORegistryError on encoding_type='null'); scanpy<1.11 keeps numpy<2.
-  "anndata>=0.12,<0.13",
+  # anndata pinned to the same range as wsinsight (<0.11) to allow co-installation
+  # in the shared wsinsight conda env. If sptxinsight must read h5ad files written
+  # by tools using anndata 0.12 format (IORegistryError on encoding_type='null'),
+  # revert this to anndata>=0.12,<0.13 and run sptxinsight in a separate env.
+  "anndata>=0.9,<0.11",
   "scanpy<1.11",
   "numpy<2.0.0",
   "pandas>=2.0",
@@ -70,6 +72,12 @@ dependencies = [
   "s3fs<2026",
   "gcsfs<2026",
   "platformdirs",
+  # boto3 + aiobotocore pinned in range to prevent pip scanning 90+ versions;
+  # exact pins can be set in constraints.txt after a first successful install.
+  "aiobotocore>=2.5.4,<3.0.0",
+  "boto3>=1.41,<1.42",
+  # pyogrio: fast OGR backend for geopandas (no system GDAL binary required)
+  "pyogrio",
 ]
 dynamic = ["version"]
 
