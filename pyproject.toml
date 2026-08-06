@@ -40,9 +40,8 @@ classifiers = [
 # prefer:  pip install --no-deps -e .   (every runtime dep is already present).
 dependencies = [
   "click>=8.0,<9,!=8.1.4,!=8.1.5",
-  # In the shared wsinsight env, h5ad files are written by wsinsight (anndata 0.10.x)
-  # so anndata 0.12 format encoding is not needed. Install with --no-deps in shared env.
-  "anndata>=0.9,<0.11",
+  # squidpy / spatialdata-io in the shared env import anndata.io, added in 0.11.
+  "anndata>=0.11,<0.12",
   "scanpy<1.11",
   "numpy<2.0.0",
   "pandas>=2.0",
