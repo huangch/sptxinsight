@@ -13,7 +13,7 @@
 
 # Core numpy<2 stack — must be kept in sync with pyproject.toml bounds
 numpy<2.0.0
-anndata<0.13           # 0.13+ requires zarr>=3 which requires numpy>=2
+anndata>=0.11,<0.13   # 0.11 works with zarr 2.x; 0.13+ requires zarr>=3 which requires numpy>=2
 zarr<3                 # zarr 3.x requires numpy>=2
 
 # boto3 / aiobotocore — pip otherwise scans 90+ versions of boto3

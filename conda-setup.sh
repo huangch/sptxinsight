@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # conda-setup.sh — create and populate the standalone sptxinsight conda environment.
 #
-# Usage:  sh ./conda-setup.sh [-n ENV_NAME] [-r|--reset]
+# Usage:  sh ./conda-setup.sh [-n ENV_NAME] [-r|--reset] [-m|--mcp]
 #
 #   -n | --name  ENV_NAME   Conda environment to use (default: current active env).
 #   -r | --reset            Deactivate, remove, recreate, and activate the env.
 #                           Without this flag the script skips env creation and
 #                           only (re-)installs packages into the existing env.
+#   -m | --mcp              Also install fastmcp (MCP server support).
+#                           Not installed by default to avoid entangling fastmcp's
+#                           jaraco.* dep chain with the main resolution.
 #
 # NOTE: sptxinsight is also co-installable inside the shared wsinsight env
 # via:  conda activate wsinsight && pip install --no-deps -e .
@@ -26,6 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # ── Argument parsing ──────────────────────────────────────────────────────────
 ENV_NAME="${CONDA_DEFAULT_ENV:-}"   # default = current active env
 DO_RESET=0
+DO_MCP=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -41,9 +45,13 @@ while [[ $# -gt 0 ]]; do
             DO_RESET=1
             shift
             ;;
+        -m|--mcp)
+            DO_MCP=1
+            shift
+            ;;
         *)
             echo "Unknown option: $1" >&2
-            echo "Usage: sh ./conda-setup.sh [-n ENV_NAME] [-r|--reset]" >&2
+            echo "Usage: sh ./conda-setup.sh [-n ENV_NAME] [-r|--reset] [-m|--mcp]" >&2
             exit 1
             ;;
     esac
@@ -55,7 +63,7 @@ if [[ -z "$ENV_NAME" ]]; then
     exit 1
 fi
 
-echo "Target conda environment: ${ENV_NAME}  (reset=${DO_RESET})"
+echo "Target conda environment: ${ENV_NAME}  (reset=${DO_RESET}, mcp=${DO_MCP})"
 
 # ── (Re-)create environment ───────────────────────────────────────────────────
 CONDA_BASE="$(conda info --base 2>/dev/null || true)"
@@ -97,9 +105,12 @@ pip install "numpy<2"
 pip install -c "${SCRIPT_DIR}/constraints.txt" -e "${SCRIPT_DIR}[zarr,harmony]"
 
 # ── MCP server (fastmcp) ──────────────────────────────────────────────────────
-# Installed separately to avoid entangling fastmcp's jaraco.* dep chain with
-# the main sptxinsight resolution. Version pins are in constraints.txt.
-pip install fastmcp
+# Optional (-m/--mcp). Installed separately to avoid entangling fastmcp's
+# jaraco.* dep chain with the main sptxinsight resolution. Version pins are
+# in constraints.txt.
+if [ "${DO_MCP}" -eq 1 ]; then
+    pip install fastmcp
+fi
 
 # ── Safety checks ─────────────────────────────────────────────────────────────
 python -c "
@@ -116,4 +127,6 @@ print(f'numpy {v} | anndata {ad} | scanpy {sp} OK')
 
 # ── Smoke test ────────────────────────────────────────────────────────────────
 sptxinsight --help
-sptxinsight-mcp --help
+if [ "${DO_MCP}" -eq 1 ]; then
+    sptxinsight-mcp --help
+fi
