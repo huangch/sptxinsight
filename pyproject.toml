@@ -97,7 +97,7 @@ scanpy = [
   # continue to work without error.
 ]
 mcp = [
-  "fastmcp>=2.0",
+  "fastmcp>=3.4.5",
 ]
 # Optional KurtoRank-powered annotation / marker-prep commands.
 kurtorank = [
