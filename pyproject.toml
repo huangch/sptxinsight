@@ -72,8 +72,10 @@ dependencies = [
   "platformdirs",
   # boto3 + aiobotocore pinned in range to prevent pip scanning 90+ versions;
   # exact pins can be set in constraints.txt after a first successful install.
+  # Floor is 1.40 (NOT 1.41): the shared wsinsight env (the master version set)
+  # locks boto3==1.40.49; a higher floor would force an upgrade in that env.
   "aiobotocore>=2.5.4,<3.0.0",
-  "boto3>=1.41,<1.42",
+  "boto3>=1.40,<1.42",
   # pyogrio: fast OGR backend for geopandas (no system GDAL binary required)
   "pyogrio",
 ]

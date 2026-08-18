@@ -25,12 +25,17 @@ def read_sample(uri: "str | URIPath") -> "AnnData":
     uri:
         Local path or fsspec URI to an ``.h5ad`` (or ``.zarr``) sample.
     """
-    import scanpy as sc
-
     path = uri if isinstance(uri, URIPath) else URIPath(str(uri))
     local = os.fspath(path)  # downloads + caches remote URIs; no-op for local
     suffix = str(local).lower()
     if suffix.endswith(".h5ad"):
+        try:
+            import scanpy as sc
+        except ImportError:
+            # scanpy is a core dependency but the shared wsinsight env (the
+            # master version set) may not have it; anndata reads .h5ad natively.
+            import anndata as ad
+            return ad.read_h5ad(local)
         return sc.read_h5ad(local)
     if suffix.endswith(".zarr"):
         import anndata as ad
