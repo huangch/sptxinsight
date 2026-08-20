@@ -32,3 +32,12 @@ gcsfs<2026
 
 # scanpy — pin to last numpy<2-compatible release
 scanpy<1.11
+
+# --- PyTorch --------------------------------------------------------------
+# pyproject leaves torch unpinned. Unconstrained it resolves to >=2.9, which
+# pulls the CUDA 13 wheels; those overwrite nvidia/cudnn/lib and break the
+# TensorFlow/StarDist half of the shared wsinsight env. torch 2.8.0 hard-pins
+# its own nvidia-*-cu12 set, so no separate CUDA pins are needed here.
+torch==2.8.0
+torchvision==0.23.0
+torch-geometric==2.6.1   # matches wsinsight's pin; used by niche discovery

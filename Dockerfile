@@ -55,8 +55,13 @@ RUN python -m pip install --upgrade pip
 
 # ------------------------------------
 # GPU stack: torch + torch_geometric (niche niche autoencoder training)
+# Copied ahead of the source tree so this layer is constrained (unpinned, torch
+# resolves to >=2.9 and pulls the CUDA 13 wheels over nvidia/cudnn/lib) and so
+# the cache survives source edits.
 # ------------------------------------
-RUN pip install --retries 10 "numpy<2" torch torchvision torch_geometric
+COPY constraints.txt /app/sptxinsight/constraints.txt
+RUN pip install --retries 10 -c /app/sptxinsight/constraints.txt \
+        "numpy<2" torch torchvision torch_geometric
 
 # ------------------------------------
 # Install sptxinsight with MCP server, zarr (zarr<3) and harmony extras.
@@ -93,17 +98,28 @@ RUN command -v sptxinsight && \
 # ------------------------------------
 # Non-root user
 # ------------------------------------
-ARG USERNAME=user
-ARG UID=1000
-ARG GID=1000
-RUN groupadd -g ${GID} ${USERNAME} && \
-    useradd -m -u ${UID} -g ${GID} -s /bin/bash ${USERNAME} && \
-    bash -lc 'echo ". /opt/conda/etc/profile.d/conda.sh" >> /home/'"${USERNAME}"'/.bashrc' && \
-    bash -lc 'echo "conda activate sptxinsight" >> /home/'"${USERNAME}"'/.bashrc' && \
-    chown -R ${UID}:${GID} /home/${USERNAME}
+# The container starts as root; the runtime entrypoint (docker-entrypoint.sh)
+# remaps the pre-created ``user`` account to the owner of the mounted /workspace
+# (or to $HOST_UID/$HOST_GID) and then drops privileges via setpriv. The uid/gid
+# baked here is only a throwaway placeholder, immediately overwritten at run
+# time, so it is hard-coded (1000) rather than exposed as a build ARG — the
+# shared entrypoint looks the account up by the name ``user``.
+RUN groupadd -g 1000 user && \
+    useradd -m -u 1000 -g 1000 -s /bin/bash user && \
+    bash -lc 'echo ". /opt/conda/etc/profile.d/conda.sh" >> /home/user/.bashrc' && \
+    bash -lc 'echo "conda activate sptxinsight" >> /home/user/.bashrc' && \
+    chown -R 1000:1000 /home/user
+
+# Install the runtime uid/gid-remapping entrypoint.
+RUN install -m 0755 /app/sptxinsight/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
 WORKDIR /workspace
-RUN chown -R ${UID}:${GID} /workspace
-USER ${USERNAME}
+RUN chown -R 1000:1000 /workspace
+# NOTE: no ``USER`` here on purpose — the container starts as root so the
+# entrypoint can remap ``user`` to the mount owner, then drops privileges via
+# setpriv. Passing ``docker run --user ...`` still works: the entrypoint detects
+# a non-root start and execs the command unchanged.
 
 SHELL ["/bin/bash","-lc"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["bash"]

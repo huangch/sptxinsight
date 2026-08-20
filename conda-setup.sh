@@ -92,9 +92,10 @@ conda activate "${ENV_NAME}"
 pip install --upgrade pip
 
 # ── Pip cache fix (NAS inode quota) ──────────────────────────────────────────
-pip cache purge || true
-# Redirect pip's wheel cache to /tmp to bypass NAS inode quotas.
-export PIP_CACHE_DIR=/tmp/pip-cache-sptxinsight
+# Redirect pip's wheel cache to /tmp to bypass NAS inode quotas. Exported before
+# any purge: `pip cache purge` obeys this variable, so purging first wiped the
+# user's global ~/.cache/pip. Shared dir so the sibling repos reuse wheels.
+export PIP_CACHE_DIR="${PIP_CACHE_DIR:-/tmp/pip-cache-wsinsight-stack}"
 
 pip install "numpy<2"
 
@@ -112,21 +113,44 @@ if [ "${DO_MCP}" -eq 1 ]; then
     pip install fastmcp
 fi
 
-# ── Safety checks ─────────────────────────────────────────────────────────────
-python -c "
-import numpy; v = numpy.__version__
-assert int(v.split('.')[0]) < 2, f'ERROR: numpy {v} >= 2.0; re-run: pip install \"numpy<2\"'
-import importlib.metadata as m
-from packaging.version import Version
-ad = m.version('anndata'); sp = m.version('scanpy')
-assert Version(ad) >= Version('0.12'), f'ERROR: anndata {ad} < 0.12 cannot read 0.12-format h5ad'
-assert Version(sp) < Version('1.11'), f'ERROR: scanpy {sp} >= 1.11 requires numpy>=2'
-import scanpy  # import must succeed
-print(f'numpy {v} | anndata {ad} | scanpy {sp} OK')
-"
-
 # ── Smoke test ────────────────────────────────────────────────────────────────
-sptxinsight --help
+# Hard checks are fatal: a half-installed env must not look like a success.
+# The test suite is reported but does not fail the setup.
+echo "---- smoke test ----"
+SMOKE_FAIL=0
+smoke() {                       # smoke <label> <command...>
+    label="$1"; shift
+    if "$@" >/dev/null 2>&1; then
+        printf '  PASS  %s\n' "$label"
+    else
+        printf '  FAIL  %s\n' "$label"
+        SMOKE_FAIL=$((SMOKE_FAIL + 1))
+    fi
+}
+
+python -c 'import importlib.metadata as m; print("  numpy", m.version("numpy"), "| anndata", m.version("anndata"), "| scanpy", m.version("scanpy"))' || true
+
+smoke "sptxinsight on PATH"  command -v sptxinsight
+smoke "sptxinsight --help"   sptxinsight --help
+smoke "import sptxinsight"   python -c 'import sptxinsight'
+smoke "import scanpy"        python -c 'import scanpy'
+smoke "numpy < 2"            python -c 'import numpy, sys; sys.exit(int(numpy.__version__.split(".")[0]) >= 2)'
+# 0.12 is required to read h5ad written in the 0.12 format.
+smoke "anndata >= 0.12"      python -c 'import sys, importlib.metadata as m; from packaging.version import Version; sys.exit(Version(m.version("anndata")) < Version("0.12"))'
+smoke "scanpy < 1.11"        python -c 'import sys, importlib.metadata as m; from packaging.version import Version; sys.exit(Version(m.version("scanpy")) >= Version("1.11"))'
 if [ "${DO_MCP}" -eq 1 ]; then
-    sptxinsight-mcp --help
+    smoke "sptxinsight-mcp on PATH" command -v sptxinsight-mcp
+    smoke "sptxinsight-mcp --help"  sptxinsight-mcp --help
 fi
+
+if [ -d "${SCRIPT_DIR}/tests" ]; then
+    python -m pytest "${SCRIPT_DIR}/tests" -q \
+        && echo "  PASS  test suite" \
+        || echo "  WARN  test suite did not pass (non-fatal)"
+fi
+
+if [ "${SMOKE_FAIL}" -ne 0 ]; then
+    echo "smoke test: ${SMOKE_FAIL} check(s) FAILED" >&2
+    exit 1
+fi
+echo "smoke test: all checks passed"
