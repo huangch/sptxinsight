@@ -64,7 +64,9 @@ RUN pip install --retries 10 -c /app/sptxinsight/constraints.txt \
         "numpy<2" torch torchvision torch_geometric
 
 # ------------------------------------
-# Install sptxinsight with MCP server, zarr (zarr<3) and harmony extras.
+# Install sptxinsight with the MCP server extra. zarr and harmonypy are core
+# dependencies now; the [zarr] and [harmony] extras are kept only so older
+# build files that name them keep working.
 # NOTE: scanpy is a core sptxinsight dependency but versions ≥1.11 require
 # numpy>=2, which conflicts with the numpy<2 stack here.  Pin scanpy to a
 # numpy<2-compatible release and pin numpy<2 after to prevent pip from
@@ -73,7 +75,7 @@ RUN pip install --retries 10 -c /app/sptxinsight/constraints.txt \
 WORKDIR /app/sptxinsight
 COPY . .
 RUN pip install --retries 10 -c /app/sptxinsight/constraints.txt \
-        "numpy<2" ".[mcp,zarr,harmony]" && \
+        "numpy<2" ".[mcp]" && \
     pip install --retries 10 "numpy<2"
 
 # ------------------------------------

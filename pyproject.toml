@@ -78,14 +78,26 @@ dependencies = [
   "boto3>=1.40,<1.42",
   # pyogrio: fast OGR backend for geopandas (no system GDAL binary required)
   "pyogrio",
+  # anndata.read_zarr backs the .zarr sample format the CLI advertises.
+  "zarr<3",
+  # Pure-Python; only the harmony batch-correct mode uses it.
+  "harmonypy>=0.0.9",
 ]
 dynamic = ["version"]
 
 [project.optional-dependencies]
+docs = [
+  "sphinx",
+  "pydata-sphinx-theme",
+  "sphinx-autoapi",
+  "sphinx-click",
+  "sphinx-copybutton",
+]
 # Co-installable with the wsinsight env (zarr<3). anndata.read_zarr works with
 # zarr 2.x, so the H-Plot path does not need zarr 3.
 zarr = [
-  "zarr<3",
+  # zarr is now a core dependency; kept empty so existing
+  # `pip install sptxinsight[zarr]` commands keep working.
 ]
 # WARNING: spatialdata / squidpy require numpy>=2 and zarr>=3, which are
 # INCOMPATIBLE with the shared wsinsight env (numpy<2, zarr<3). Install these
@@ -117,7 +129,8 @@ kurtorank = [
 # Cross-sample batch correction of niche embeddings (sptxinsight niche
 # --niche-batch-correct harmony). Pure-Python; the 'center' method needs no extra.
 harmony = [
-  "harmonypy>=0.0.9",
+  # harmonypy is now a core dependency; kept empty so existing
+  # `pip install sptxinsight[harmony]` commands keep working.
 ]
 
 [project.urls]
