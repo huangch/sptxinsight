@@ -7,30 +7,30 @@
 #   pip freeze | grep -E "boto3|aiobotocore|botocore|google-|zarr|anndata|scanpy|numpy|fsspec"
 # and replace the ranges below with the exact resolved ==X.Y.Z pins.
 #
-# Ranges here are "good enough" to bound the search space; exact pins are
-# faster but require a known-working install to capture.
+# Ranges were replaced with the exact versions resolved in the shared
+# wsinsight env (the master version set), so the two stay co-installable.
 # ─────────────────────────────────────────────────────────────────────────────
 
 fastmcp>=3.4.5
 fastmcp-slim>=3.4.5
 # Core numpy<2 stack — must be kept in sync with pyproject.toml bounds
 numpy<2.0.0
-anndata>=0.11,<0.13   # 0.11 works with zarr 2.x; 0.13+ requires zarr>=3 which requires numpy>=2
-zarr<3                 # zarr 3.x requires numpy>=2
+anndata>=0.11,<0.13    # 0.13+ requires zarr>=3, which requires numpy>=2
+zarr==2.18.7           # zarr 3.x requires numpy>=2
 
 # boto3 / aiobotocore — pip otherwise scans 90+ versions of boto3
-# Replace with exact ==X.Y.Z after running pip freeze
-# Floor is 1.40 (NOT 1.41): the shared wsinsight env (the master version set)
-# locks boto3==1.40.49; a higher floor would force an upgrade in that env.
-boto3>=1.40,<1.42
-aiobotocore>=2.5.4,<3.0.0
+# 1.40.49 (NOT 1.41+): the shared wsinsight env (the master version set)
+# locks it there, and a higher pin would force an upgrade in that env.
+boto3==1.40.49
+botocore==1.40.49
+aiobotocore==2.25.0
 
 # fsspec family
-fsspec>=2023.1.0,<2026
-s3fs<2026
-gcsfs<2026
+fsspec==2025.9.0
+s3fs==2025.9.0
+gcsfs==2025.9.0
 
-# scanpy — pin to last numpy<2-compatible release
+# scanpy — last numpy<2-compatible release
 scanpy<1.11
 
 # --- PyTorch --------------------------------------------------------------
@@ -41,3 +41,30 @@ scanpy<1.11
 torch==2.8.0
 torchvision==0.23.0
 torch-geometric==2.6.1   # matches wsinsight's pin; used by niche discovery
+
+# --- remaining direct deps from pyproject.toml -----------------------------
+click==8.3.0
+geopandas==1.1.1
+h5py==3.15.0
+igraph==0.11.9
+joblib==1.5.2
+leidenalg==0.10.2
+pandas==2.3.3
+platformdirs==4.5.0
+pynndescent==0.6.0
+pyogrio==0.11.1
+requests==2.32.5
+scikit-learn==1.7.2
+scipy==1.16.2
+shapely==2.1.2
+tqdm==4.67.1
+
+# --- optional extras -------------------------------------------------------
+harmonypy==2.0.0          # harmony
+dask==2024.10.0           # kurtorank
+distributed==2024.10.0    # kurtorank
+spatialdata>=0.4,<0.5     # kurtorank, spatialdata
+spatialdata-io>=0.6,<0.7  # kurtorank
+squidpy<1.7               # kurtorank
+xarray<2025               # kurtorank
+# scikit-misc is absent from the reference env, so there is no version to pin.
