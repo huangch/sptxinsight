@@ -31,9 +31,16 @@ Experimental (hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`): `hplot`, `hplot-final
 - Long-running commands (`run`, `ingest`, `verify`, `niche` …) return a `job_id`; poll `job_status`/`job_logs`/`cancel_job`. Short commands (`export`, `niche-profile`) run synchronously.
 - Adapter (`sptxinsight/mcp/adapters.py`) translates snake_case args → kebab-case `--flags`; no positional args supported.
 
-## Vendored H-Plot engine
+## insightlib/ is a copy of WSInsight's pipeline layer
 
-- The H-Plot engine is **vendored under `sptxinsight.insightlib`** (reused from WSInsight, not imported from the hplot package). When the upstream engine changes in `hplot`/`wsinsight`, the vendored copy must be updated by hand.
+- `sptxinsight/insightlib/` was **copied from `wsinsight/insightlib/`**, then patched for
+  AnnData input (see `io/_wsi_stub.py`, which stubs out the WSI-only helpers, and
+  `adapt.py`). When wsinsight fixes something in its `insightlib/`, port it here by hand.
+- It is **not** a copy of the `hplot` package, and its `compute_hplot` is a different
+  implementation from that package's `HPlot` class. The shared name is a collision.
+- The `hplot` package is the **downstream, user-facing** analysis layer: it runs in the
+  Jupyter environment (driven by `clawpyter`) on outputs this repo has written. Do not
+  make this repo import it — that would invert the layering.
 
 ## Tests & lint
 
@@ -43,5 +50,5 @@ Experimental (hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`): `hplot`, `hplot-final
 ## Sibling repos (same ecosystem)
 
 - `wsinsight` — WSI-image sibling (primary runtime; shared conda env; MCP port 8765).
-- `hplot` — upstream of the H-Plot stats/plotting core that this repo vendors.
+- `hplot` — downstream, user-facing analysis package used from Jupyter; not a dependency of this repo.
 - `clawsight` / `clawpyter` — client-side agent plugins driving these MCP servers / Jupyter.
