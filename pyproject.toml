@@ -132,6 +132,12 @@ harmony = [
   # harmonypy is now a core dependency; kept empty so existing
   # `pip install sptxinsight[harmony]` commands keep working.
 ]
+# Test runner for the post-install smoke test in conda-setup.sh. NOT installed
+# by default; brings pytest so `sptxinsight[dev]` / conda-setup can run the suite.
+dev = [
+  "pytest>=7",
+  "pytest-cov",
+]
 
 [project.urls]
 Repository = "https://github.com/huangch/sptxinsight"
