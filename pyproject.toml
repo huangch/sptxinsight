@@ -137,6 +137,7 @@ harmony = [
 dev = [
   "pytest>=7",
   "pytest-cov",
+  "pre_commit>=3",
 ]
 
 [project.urls]
