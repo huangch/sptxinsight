@@ -11,8 +11,13 @@
 # wsinsight env (the master version set), so the two stay co-installable.
 # ─────────────────────────────────────────────────────────────────────────────
 
-fastmcp>=4.0,<5
-fastmcp-slim>=4.0,<5
+# Exact pins: this is the lockfile. The >=4.0,<5 range lives in pyproject.toml.
+# Must match wsinsight and hplot — the three share one conda env.
+fastmcp==4.0.2
+fastmcp-slim==4.0.2
+# hermes-agent pins mcp==2.0.0 exactly; match it so the shared conda env
+# does not thrash between 2.0.0 and 2.1.1. fastmcp 4 accepts mcp>=2.0,<3.
+mcp==2.0.0
 # Core numpy<2 stack — must be kept in sync with pyproject.toml bounds
 numpy<2.0.0
 anndata>=0.11,<0.13    # 0.13+ requires zarr>=3, which requires numpy>=2

@@ -52,7 +52,7 @@ pip install --no-deps -e .
 ```
 
 Optional extras: `spatialdata` (dedicated `numpy>=2` env), `mcp`
-(`fastmcp>=2.0` MCP server), `kurtorank` (enables KurtoRank-backed annotation
+(`fastmcp>=4.0,<5` MCP server), `kurtorank` (enables KurtoRank-backed annotation
 such as `annotate`). `zarr`, `scanpy`, `harmony`/`harmonypy` are core
 dependencies and have no extra to install.
 

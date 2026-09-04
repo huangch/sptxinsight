@@ -26,7 +26,7 @@ Experimental (hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`): `hplot`, `hplot-final
 
 ## MCP server (`sptxinsight-mcp`)
 
-- Entry point `sptxinsight.mcp.__main__:main`; extra `mcp = ["fastmcp>=2.0"]`. stdio by default; `--http` (default port **8766**).
+- Entry point `sptxinsight.mcp.__main__:main`; extra `mcp = ["fastmcp>=4.0,<5"]`. stdio by default; `--http` (default port **8766**).
 - Unlike WSInsight, tools are registered from the **live** CLI schema (`sptxinsight schema` at startup) — no bundled JSON to keep in sync.
 - Long-running commands (`run`, `ingest`, `verify`, `niche` …) return a `job_id`; poll `job_status`/`job_logs`/`cancel_job`. Short commands (`export`, `niche-profile`) run synchronously.
 - Adapter (`sptxinsight/mcp/adapters.py`) translates snake_case args → kebab-case `--flags`; no positional args supported.

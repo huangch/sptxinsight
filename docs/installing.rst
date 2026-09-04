@@ -42,7 +42,7 @@ Optional extras
      - ``harmonypy``
      - Required for ``niche --batch-correct harmony``.
    * - ``mcp``
-     - ``fastmcp>=2.0``
+     - ``fastmcp>=4.0,<5``
      - Model Context Protocol server.
    * - ``kurtorank``
      - ``kurtorank>=3.1.0``, ``scikit-misc>=0.3``
