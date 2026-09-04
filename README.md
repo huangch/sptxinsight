@@ -212,8 +212,8 @@ memory; off by default; no effect on CPU/MPS),
 embeddings — use a technical unit such as sample/run as the batch, never a
 biological condition), and `--regions` (merge cells into annotation-level
 regions). `--expression` is a deprecated alias for `--mode both`.
-The `harmony` method needs the optional `harmonypy` extra
-(`pip install 'sptxinsight[harmony]'`); `center` needs no extra dependency.
+The `harmony` method needs the optional `harmonypy` package
+(`pip install harmonypy`); `center` needs no extra dependency.
 
 ### Naming niches
 

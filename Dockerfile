@@ -65,8 +65,7 @@ RUN pip install --retries 10 -c /app/sptxinsight/constraints.txt \
 
 # ------------------------------------
 # Install sptxinsight with the MCP server extra. zarr and harmonypy are core
-# dependencies now; the [zarr] and [harmony] extras are kept only so older
-# build files that name them keep working.
+# dependencies now, so they do not need their own extras.
 # NOTE: scanpy is a core sptxinsight dependency but versions ≥1.11 require
 # numpy>=2, which conflicts with the numpy<2 stack here.  Pin scanpy to a
 # numpy<2-compatible release and pin numpy<2 after to prevent pip from

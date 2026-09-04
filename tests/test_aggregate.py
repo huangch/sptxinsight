@@ -19,7 +19,6 @@ from sptxinsight.insightlib.aggregate import aggregate_features
 from sptxinsight.insightlib.aggregate import contract_to_quotient
 from sptxinsight.insightlib.aggregate import identify_aggregates
 from sptxinsight.insightlib.graph_cache import read_aggregate_cache
-from sptxinsight.insightlib.insight_helpers import compute_cell_center_points
 from sptxinsight.insightlib.insight_helpers import delaunay_triangulation
 from sptxinsight.uri_path import URIPath
 
@@ -39,7 +38,6 @@ def _grid_block(x0: int, y0: int, side: int, spacing: float, label: str):
 
 def _make_nodes_df(centers: np.ndarray, labels: list[str], classes: list[str]):
     """Build a model-output-shaped DataFrame with one-hot-ish prob_ columns."""
-    n = len(centers)
     df = pd.DataFrame(
         {
             "center_x_um": centers[:, 0],
@@ -173,8 +171,11 @@ def _build_results_dir(tmp_path: Path) -> Path:
     centers = np.concatenate([c1, c2, bg], axis=0)
     labels = l1 + l2 + ["tumor"] * len(bg)
     df = _make_nodes_df(centers, labels, ["t_cell", "b_cell", "tumor"])
-    # Drop the helper-added center columns; the worker recomputes them.
-    df = df.drop(columns=["center_x_um", "center_y_um"])
+    # Keep center_x_um / center_y_um in the CSV: the sptxinsight model-output
+    # contract uses µm coords (compute_cell_center_points returns the df
+    # unchanged if these columns are present; the WSI/px fallback branch
+    # would otherwise try to look up `minx`/`miny`/`width`/`height` which
+    # are also absent from this synthetic sample).
 
     results_dir = tmp_path / "results"
     (results_dir / "model-outputs-csv").mkdir(parents=True)

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import os.path as _osp
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from typing import Dict
-from typing import Iterable
 from typing import List
 from typing import Tuple
-import os.path as _osp
 
 import numpy as np
 import pandas as pd
@@ -33,12 +32,12 @@ def make_short_ids(stems: List[str]) -> dict:
     if len(stems) <= 1:
         return {s: s for s in stems}
     raw_pre = _osp.commonprefix(stems)
-    cut_start = raw_pre.rfind('_') + 1
+    cut_start = raw_pre.rfind("_") + 1
     raw_suf = _osp.commonprefix([s[::-1] for s in stems])
-    cut_end = raw_suf.rfind('_') + 1
+    cut_end = raw_suf.rfind("_") + 1
     result = {}
     for s in stems:
-        short = s[cut_start: len(s) - cut_end if cut_end else len(s)]
+        short = s[cut_start : len(s) - cut_end if cut_end else len(s)]
         result[s] = short or s
     return result
 
@@ -922,6 +921,11 @@ def compute_hplot(df_with_distances, filtered_edges_df):
 
     # Drop rows where we couldn't calculate the cumulative average edge length
     plot_df = plot_df.dropna(subset=["distance_um"])
+
+    # Legacy alias: callers written against older revisions of `compute_hplot`
+    # read the cumulative distance from a `distance` column. Keep the alias
+    # so the schema stays compatible with existing notebooks / tests.
+    plot_df["distance"] = plot_df["distance_um"]
 
     # Sort by the new x-axis values for a clear line plot
     plot_df = plot_df.sort_values("layer")

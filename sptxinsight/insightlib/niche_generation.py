@@ -420,10 +420,18 @@ class DGIModule(nn.Module):
         return self.dgi.loss(pos_z, neg_z, s)
 
 
-def train_dgi_multi(slides, hidden=64, out_dim=32, epochs=300, lr=1e-3, wd=1e-4,
-                    amp=False,
-                    early_stop_patience=20, early_stop_min_delta=1e-4,
-                    early_stop_min_epochs=50):
+def train_dgi_multi(
+    slides,
+    hidden=64,
+    out_dim=32,
+    epochs=300,
+    lr=1e-3,
+    wd=1e-4,
+    amp=False,
+    early_stop_patience=20,
+    early_stop_min_delta=1e-4,
+    early_stop_min_epochs=50,
+):
     """Train a shared DGI encoder across sample graphs and return embeddings.
 
     The encoder consumes the raw k-hop feature matrix ``s["X"]`` directly: the
@@ -522,15 +530,23 @@ def train_dgi_multi(slides, hidden=64, out_dim=32, epochs=300, lr=1e-3, wd=1e-4,
             # Relative improvement threshold so it adapts to the loss scale.
             # First finite epoch always seeds best_loss (comparing against inf
             # yields NaN, so guard it explicitly).
-            if not math.isfinite(best_loss) or epoch_loss < best_loss - early_stop_min_delta * max(abs(best_loss), 1.0):
+            if not math.isfinite(
+                best_loss
+            ) or epoch_loss < best_loss - early_stop_min_delta * max(
+                abs(best_loss), 1.0
+            ):
                 best_loss = epoch_loss
                 epochs_no_improve = 0
             else:
                 epochs_no_improve += 1
-            if (epoch + 1) >= early_stop_min_epochs and epochs_no_improve >= early_stop_patience:
-                print(f"[DGI early-stop] no improvement > {early_stop_min_delta} (relative) for "
-                      f"{early_stop_patience} epochs; stopping at epoch {epoch + 1}/{epochs} "
-                      f"(best mean loss={best_loss:.4f}).")
+            if (
+                epoch + 1
+            ) >= early_stop_min_epochs and epochs_no_improve >= early_stop_patience:
+                print(
+                    f"[DGI early-stop] no improvement > {early_stop_min_delta} (relative) for "
+                    f"{early_stop_patience} epochs; stopping at epoch {epoch + 1}/{epochs} "
+                    f"(best mean loss={best_loss:.4f})."
+                )
                 break
 
     enc_eval = (model.module.dgi.encoder if ngpu > 1 else model.dgi.encoder).to(primary)
@@ -699,8 +715,7 @@ def _approx_knn_connectivity(Z: np.ndarray, k_nn: int = 15, seed: int = 0):
     try:
         from pynndescent import NNDescent
 
-        index = NNDescent(Zf, n_neighbors=k, metric="euclidean",
-                          random_state=seed)
+        index = NNDescent(Zf, n_neighbors=k, metric="euclidean", random_state=seed)
         neighbors, _ = index.neighbor_graph
     except Exception:
         neighbors = None
@@ -950,8 +965,16 @@ def _mpp_for(wsi_path, slide_mpp_lookup: Mapping[str, float] | None) -> float:
 # (unsuffixed) paths and ``niche_`` prefix for backward compatibility.
 _NICHE_MODE_SPEC: Dict[str, Dict[str, str]] = {
     "celltype": {"subdir": "niche-outputs-csv", "prefix": "niche", "ckpt": ""},
-    "expression": {"subdir": "niche-gex-outputs-csv", "prefix": "gexniche", "ckpt": "-gex"},
-    "both": {"subdir": "niche-hybrid-outputs-csv", "prefix": "hniche", "ckpt": "-hybrid"},
+    "expression": {
+        "subdir": "niche-gex-outputs-csv",
+        "prefix": "gexniche",
+        "ckpt": "-gex",
+    },
+    "both": {
+        "subdir": "niche-hybrid-outputs-csv",
+        "prefix": "hniche",
+        "ckpt": "-hybrid",
+    },
 }
 
 
@@ -977,8 +1000,7 @@ def _harmony_correct(
     except ImportError as exc:  # pragma: no cover - optional dependency
         raise RuntimeError(
             "Harmony batch correction needs the optional 'harmonypy' package. "
-            "Install it with: pip install harmonypy  "
-            "(or pip install 'sptxinsight[harmony]')."
+            "Install it with: pip install harmonypy."
         ) from exc
     lengths = [len(Z) for Z in Z_list]
     Z_all = np.vstack(Z_list).astype(np.float64)
@@ -1282,11 +1304,14 @@ def niche_generation(
             fg="green",
         )
         _, Z_list = train_dgi_multi(
-            slides, hidden=hidden, out_dim=out_dim, epochs=epochs,
+            slides,
+            hidden=hidden,
+            out_dim=out_dim,
+            epochs=epochs,
             early_stop_patience=early_stop_patience,
             early_stop_min_delta=early_stop_min_delta,
             early_stop_min_epochs=early_stop_min_epochs,
-            amp=amp
+            amp=amp,
         )
         joblib.dump(Z_list, niche_dgi_embeddings_file, compress=3)
 

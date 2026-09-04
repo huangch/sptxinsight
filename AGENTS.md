@@ -7,8 +7,8 @@ Spatial-transcriptomics sibling of WSInsight: ingests AnnData samples (`.h5ad`/`
 - **Co-installable with the shared `wsinsight` conda env** — that's the intended setup. In a shared env, install with `pip install --no-deps -e .` so pip cannot upgrade the locked `numpy<2` / `zarr<3` / `fsspec<2026` generation that WSInsight depends on.
 - Version caps in `pyproject.toml` are **deliberate** (they keep the two packages co-installable). Don't "fix" or loosen them. anndata is `>=0.11,<0.13` — 0.12 is needed to read 0.12-format `annotated.h5ad` (older anndata raises `IORegistryError` on `encoding_type='null'`); the hard floor is stardist→`numpy<2` in the shared env, not anndata.
 - **Exception:** the `spatialdata` extra needs `numpy>=2` + `zarr>=3` — INCOMPATIBLE with the shared env. Install it only in a dedicated numpy-2 env.
-- Optional extras: `mcp` (fastmcp), `kurtorank` (annotate/marker-* commands), `harmony` (batch correction), `zarr` (read `.zarr` in shared env).
-- Standalone env: `sh ./conda-setup.sh -n sptxinsight [-m|--mcp]` — fastmcp is **not** installed by default (the `-m`/`--mcp` flag adds it, matching wsinsight's convention).
+- Optional extras: `mcp` (fastmcp), `kurtorank` (annotate/marker-* commands). `zarr`, `scanpy`, `harmony`/`harmonypy` are core dependencies — no extra to install.
+- Standalone env: `sh ./conda-setup.sh sptxinsight [-m|--mcp] [-d|--dev] [-r|--reset]` — fastmcp is **not** installed by default (the `-m`/`--mcp` flag adds it, matching wsinsight's convention). Add `-d`/`--dev` to also install pytest/pytest-cov/ruff/pre_commit for running the test suite; add `-r`/`--reset` to nuke and recreate the env. Run `./conda-setup.sh --help` for the full CLI.
 - Core needs **no** torch/tensorflow/openslide — niche discovery adds torch + torch_geometric + geopandas/shapely.
 
 ## CLI

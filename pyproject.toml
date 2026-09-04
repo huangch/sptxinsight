@@ -93,22 +93,11 @@ docs = [
   "sphinx-click",
   "sphinx-copybutton",
 ]
-# Co-installable with the wsinsight env (zarr<3). anndata.read_zarr works with
-# zarr 2.x, so the H-Plot path does not need zarr 3.
-zarr = [
-  # zarr is now a core dependency; kept empty so existing
-  # `pip install sptxinsight[zarr]` commands keep working.
-]
 # WARNING: spatialdata / squidpy require numpy>=2 and zarr>=3, which are
 # INCOMPATIBLE with the shared wsinsight env (numpy<2, zarr<3). Install these
 # extras only in a dedicated numpy-2 environment.
 spatialdata = [
   "spatialdata",
-]
-scanpy = [
-  # scanpy is now a core dependency; this extra is kept for backward
-  # compatibility so existing `pip install sptxinsight[scanpy]` commands
-  # continue to work without error.
 ]
 mcp = [
   "fastmcp>=3.4.5",
@@ -126,17 +115,12 @@ kurtorank = [
   "dask>=2024.10.0,<=2024.11.2",
   "distributed>=2024.10.0,<=2024.11.2",
 ]
-# Cross-sample batch correction of niche embeddings (sptxinsight niche
-# --niche-batch-correct harmony). Pure-Python; the 'center' method needs no extra.
-harmony = [
-  # harmonypy is now a core dependency; kept empty so existing
-  # `pip install sptxinsight[harmony]` commands keep working.
-]
 # Test runner for the post-install smoke test in conda-setup.sh. NOT installed
 # by default; brings pytest so `sptxinsight[dev]` / conda-setup can run the suite.
 dev = [
   "pytest>=7",
   "pytest-cov",
+  "ruff",            # pyproject already declares [tool.ruff]; keep config + runner in sync
   "pre_commit>=3",
 ]
 

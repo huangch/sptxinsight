@@ -1,15 +1,26 @@
 #!/usr/bin/env bash
 # conda-setup.sh — create and populate the standalone sptxinsight conda environment.
 #
-# Usage:  sh ./conda-setup.sh [-n ENV_NAME] [-r|--reset] [-m|--mcp]
+# <<<USAGE_START>>>
+# Usage:  sh ./conda-setup.sh ENV_NAME [-r|--reset] [-m|--mcp] [-d|--dev] [-h|--help]
 #
-#   -n | --name  ENV_NAME   Conda environment to use (default: current active env).
-#   -r | --reset            Deactivate, remove, recreate, and activate the env.
+#   ENV_NAME                (positional, REQUIRED) Conda environment to use/create.
+#                           There is NO fallback to the currently-activated conda env:
+#                           the name is mandatory so `-r` can never accidentally
+#                           destroy a different active environment.
+#   -r | --reset            Deactivate, remove, recreate, and activate ENV_NAME.
 #                           Without this flag the script skips env creation and
 #                           only (re-)installs packages into the existing env.
 #   -m | --mcp              Also install fastmcp (MCP server support).
 #                           Not installed by default to avoid entangling fastmcp's
 #                           jaraco.* dep chain with the main resolution.
+#   -d | --dev              Also install the [dev] extra (pytest, pytest-cov,
+#                           pre_commit) so the post-install smoke test can run the
+#                           real test suite. Without -d the suite is SKIPped if
+#                           pytest is missing; with -d it FAILS (you asked for it).
+#                           The package itself is always installed editable (-e).
+#   -h | --help             Print this help message and exit.
+# <<<USAGE_END>>>
 #
 # NOTE: sptxinsight is also co-installable inside the shared wsinsight env
 # via:  conda activate wsinsight && pip install --no-deps -e .
@@ -27,19 +38,27 @@ set -e   # abort on first error
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
-ENV_NAME="${CONDA_DEFAULT_ENV:-}"   # default = current active env
+# ENV_NAME is the FIRST POSITIONAL argument and is REQUIRED. We deliberately do
+# NOT fall back to $CONDA_DEFAULT_ENV: with `-r` in play, a hidden dependency on
+# whatever env happens to be active is a footgun (it would silently destroy an
+# unrelated env). Make the caller name the env explicitly, every time.
 DO_RESET=0
 DO_MCP=0
+DO_DEV=0
+
+print_usage() {
+    awk '
+        /<<<USAGE_START>>>/ {capture=1; next}
+        /<<<USAGE_END>>>/   {capture=0}
+        capture            {sub(/^# ?/, ""); print}
+    ' "$0"
+}
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -n|--name)
-            if [[ -z "${2:-}" ]]; then
-                echo "Error: -n/--name requires an environment name." >&2
-                exit 1
-            fi
-            ENV_NAME="$2"
-            shift 2
+        -h|--help)
+            print_usage
+            exit 0
             ;;
         -r|--reset)
             DO_RESET=1
@@ -49,21 +68,37 @@ while [[ $# -gt 0 ]]; do
             DO_MCP=1
             shift
             ;;
-        *)
+        -d|--dev)
+            DO_DEV=1
+            shift
+            ;;
+        -*)
             echo "Unknown option: $1" >&2
-            echo "Usage: sh ./conda-setup.sh [-n ENV_NAME] [-r|--reset] [-m|--mcp]" >&2
+            echo "Run '${0##*/} --help' for usage." >&2
             exit 1
+            ;;
+        *)
+            # First non-flag token is ENV_NAME. Reject a second positional
+            # argument (we only have one positional slot).
+            if [[ -n "${ENV_NAME:-}" ]]; then
+                echo "Error: only one positional argument (ENV_NAME) is accepted; got '$ENV_NAME' and '$1'." >&2
+                echo "Run '${0##*/} --help' for usage." >&2
+                exit 1
+            fi
+            ENV_NAME="$1"
+            shift
             ;;
     esac
 done
 
-if [[ -z "$ENV_NAME" ]]; then
-    echo "Error: no conda environment specified and no environment is currently active." >&2
-    echo "       Use -n ENV_NAME to specify one." >&2
+if [[ -z "${ENV_NAME:-}" ]]; then
+    echo "Error: ENV_NAME is required." >&2
+    echo "       Got: $0 $*" >&2
+    echo "       Run '${0##*/} --help' for usage." >&2
     exit 1
 fi
 
-echo "Target conda environment: ${ENV_NAME}  (reset=${DO_RESET}, mcp=${DO_MCP})"
+echo "Target conda environment: ${ENV_NAME}  (reset=${DO_RESET}, mcp=${DO_MCP}, dev=${DO_DEV})"
 
 # ── (Re-)create environment ───────────────────────────────────────────────────
 CONDA_BASE="$(conda info --base 2>/dev/null || true)"
@@ -101,9 +136,15 @@ pip install "numpy<2"
 
 # ── Install all sptxinsight dependencies declared in pyproject.toml ───────────
 # Installs torch, torchvision, torch_geometric, scanpy, anndata, geopandas,
-# aiobotocore, boto3, fsspec, s3fs, gcsfs, igraph, leidenalg, etc.
-# zarr<3 and harmonypy are installed via [zarr,harmony] extras below.
-pip install -c "${SCRIPT_DIR}/constraints.txt" -e "${SCRIPT_DIR}[zarr,harmony]"
+# aiobotocore, boto3, fsspec, s3fs, gcsfs, igraph, leidenalg, zarr, harmonypy, etc.
+# With -d/--dev, also install the [dev] extra (pytest, pytest-cov, ruff, pre_commit)
+# so the smoke test can run the suite; without -d, the suite is SKIPped if
+# pytest is missing and only WARN-ed if it fails.
+if [[ "${DO_DEV}" -eq 1 ]]; then
+    pip install -c "${SCRIPT_DIR}/constraints.txt" -e "${SCRIPT_DIR}[dev]"
+else
+    pip install -c "${SCRIPT_DIR}/constraints.txt" -e "${SCRIPT_DIR}"
+fi
 
 # ── MCP server (fastmcp) ──────────────────────────────────────────────────────
 # Optional (-m/--mcp). Installed separately to avoid entangling fastmcp's
@@ -148,8 +189,13 @@ if [ -d "${SCRIPT_DIR}/tests" ]; then
         python -m pytest "${SCRIPT_DIR}/tests" -q \
             && echo "  PASS  test suite" \
             || echo "  WARN  test suite did not pass (non-fatal)"
+    elif [ "${DO_DEV}" -eq 1 ]; then
+        # User asked for the [dev] extra: pytest should be present. FAIL loudly
+        # instead of silently SKIPping, or the install is misconfigured.
+        echo "  FAIL  test suite: pytest missing but -d/--dev was requested" >&2
+        smoke "pytest importable (dev)" python -c "import pytest"
     else
-        echo "  SKIP  test suite (pytest not installed; pip install -e '.[dev]')"
+        echo "  SKIP  test suite (pytest not installed; rerun with -d/--dev)"
     fi
 fi
 
