@@ -15,7 +15,7 @@ Spatial-transcriptomics sibling of WSInsight: ingests AnnData samples (`.h5ad`/`
 
 Entry point `sptxinsight` (global `--backend {anndata,zarr,spatialdata}` precedes the subcommand).
 
-Stable: `run` (ingest → H-Plot end-to-end), `ingest`, `verify`, `export`, `describe`, `niche`, `niche-profile`, plus KurtoRank-backed `annotate` / `marker-init` / `marker-rerank` (hidden without `sptxinsight[kurtorank]`).
+Stable: `run` (ingest → H-Plot end-to-end), `ingest`, `verify`, `export`, `schema`, `niche`, `niche-profile`, plus KurtoRank-backed `annotate` / `marker-init` / `marker-rerank` (hidden without `sptxinsight[kurtorank]`).
 
 Experimental (hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`): `hplot`, `hplot-finalize`, `cci` (ligand-receptor), `agg` (cell-type aggregates, e.g. TLS).
 
@@ -27,7 +27,7 @@ Experimental (hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`): `hplot`, `hplot-final
 ## MCP server (`sptxinsight-mcp`)
 
 - Entry point `sptxinsight.mcp.__main__:main`; extra `mcp = ["fastmcp>=2.0"]`. stdio by default; `--http` (default port **8766**).
-- Unlike WSInsight, tools are registered from the **live** CLI schema (`sptxinsight describe` at startup) — no bundled JSON to keep in sync.
+- Unlike WSInsight, tools are registered from the **live** CLI schema (`sptxinsight schema` at startup) — no bundled JSON to keep in sync.
 - Long-running commands (`run`, `ingest`, `verify`, `niche` …) return a `job_id`; poll `job_status`/`job_logs`/`cancel_job`. Short commands (`export`, `niche-profile`) run synchronously.
 - Adapter (`sptxinsight/mcp/adapters.py`) translates snake_case args → kebab-case `--flags`; no positional args supported.
 

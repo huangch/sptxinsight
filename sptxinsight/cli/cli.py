@@ -15,13 +15,14 @@ import click
 from ..io import set_backend
 from .agg import agg
 from .cci import cci
-from .niche import niche
-from .niche import niche_profile_cmd
 from .export import export
 from .hplot import hplot
 from .hplot import hplot_finalize_cmd
+from .niche import niche
+from .niche import niche_profile_cmd
 from .run import run
 from .verify import verify
+
 # NOTE: `ingest` is intentionally not registered as a CLI command.
 # Use `wsinsight import --platform xenium-h5ad` instead, which natively
 # reads sptxinsight annotated.h5ad files without requiring an intermediate
@@ -103,7 +104,7 @@ cli.add_command(cci)
 cli.add_command(agg)
 
 # Hide experimental commands from --help unless SPTXINSIGHT_EXPERIMENTAL is set.
-# They remain registered so `describe` can emit the full schema; invocation is
+# They remain registered so `schema` can emit the full schema; invocation is
 # blocked in the group callback above.
 if not _experimental_enabled():
     for _name in _EXPERIMENTAL_COMMANDS:
@@ -179,7 +180,7 @@ def _describe_command(name: str, cmd: click.Command) -> dict[str, Any]:
     }
 
 
-@cli.command(name="describe")
+@cli.command(name="schema")
 @click.option(
     "--output",
     "output_path",
@@ -187,11 +188,11 @@ def _describe_command(name: str, cmd: click.Command) -> dict[str, Any]:
     default=None,
     help="Write the schema JSON to this file instead of stdout.",
 )
-def describe_cmd(output_path: str | None) -> None:
+def schema_cmd(output_path: str | None) -> None:
     """Emit a machine-readable JSON schema of every sptxinsight subcommand."""
     schema: dict[str, Any] = {"schema_version": 1, "commands": {}}
     for name, cmd in cli.commands.items():
-        if name == "describe":
+        if name == "schema":
             continue
         schema["commands"][name] = _describe_command(name, cmd)
     payload = json.dumps(schema, indent=2, sort_keys=True)

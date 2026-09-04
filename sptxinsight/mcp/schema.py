@@ -1,7 +1,7 @@
 """Schema-driven generation of MCP tool definitions from the sptxinsight CLI.
 
 The single source of truth is the live Click command tree (the same data
-``sptxinsight describe`` serialises). This module builds it in-process,
+``sptxinsight schema`` serialises). This module builds it in-process,
 classifies commands as stable / experimental and short / long-running, and
 converts each Click parameter into a JSON-schema property suitable for use as
 an MCP tool input schema. Building it live (rather than reading a committed
@@ -71,7 +71,7 @@ def load_schema() -> dict[str, Any]:
 
     commands: dict[str, Any] = {}
     for name, cmd in cli.commands.items():
-        if name == "describe":
+        if name == "schema":
             continue
         commands[name] = _describe_command(name, cmd)
     return {"schema_version": 1, "commands": commands}

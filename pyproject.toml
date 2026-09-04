@@ -100,7 +100,7 @@ spatialdata = [
   "spatialdata",
 ]
 mcp = [
-  "fastmcp>=3.4.5",
+  "fastmcp>=4.0,<5",
 ]
 # Optional KurtoRank-powered annotation / marker-prep commands.
 kurtorank = [

@@ -58,7 +58,7 @@ selects the sample loader and `--log-level` sets logging verbosity.
 | `marker-rerank` | Rerank marker genes against CELLxGENE Census (KurtoRank wrapper). Requires installing `sptxinsight[kurtorank]`; hidden otherwise. |
 | `verify` | Verify samples are cell-typed and report per-type counts. |
 | `export` | Print the path to the aggregated H-Plot table. |
-| `describe` | Emit a JSON schema of every subcommand (for tooling / MCP). |
+| `schema` | Emit a JSON schema of every subcommand (for tooling / MCP). |
 | `niche` | Discover niches across ingested samples. |
 | `niche-profile` | Summarise each niche's cell composition and marker genes to help name niches. |
 | `hplot`, `hplot-finalize` | Experimental: run/aggregate H-Plot over ingested CSVs. Hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`. |
