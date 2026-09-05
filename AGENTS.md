@@ -31,6 +31,15 @@ Experimental (hidden unless `SPTXINSIGHT_EXPERIMENTAL=1`): `hplot`, `hplot-final
 - Long-running commands (`run`, `ingest`, `verify`, `niche` …) return a `job_id`; poll `job_status`/`job_logs`/`cancel_job`. Short commands (`export`, `niche-profile`) run synchronously.
 - Adapter (`sptxinsight/mcp/adapters.py`) translates snake_case args → kebab-case `--flags`; no positional args supported.
 
+## Running SPTxInsight (the unified wrapper)
+
+- `./sptxinsight.sh` is the **single entry point** for running `sptxinsight`. It manages BOTH runners — `native` (the sptxinsight CLI on the host inside the activated conda env) and `docker` (the `huangchtw/sptxinsight:latest` container). The legacy `sptxinsight-docker-run.sh` wrapper has moved to `bak_old_scripts/`.
+- Subcommands: `./sptxinsight.sh run [--runner native|docker] [--gpu ID|all] [--tmpdir DIR] [--no-pull] [--dry-run] [SPTXINSIGHT_ARGS ...]`, `./sptxinsight.sh status`, `./sptxinsight.sh doctor`, `./sptxinsight.sh where`. Run `./sptxinsight.sh --help` for the full surface.
+- **Why `--runner` (not `-b` / `--backend`):** sptxinsight's CLI itself has a global `--backend` flag that selects the I/O backend (`anndata|zarr|spatialdata`). The wrapper uses `--runner` for the orthogonal "where do I run the CLI" question, keeping the two flag spaces disjoint.
+- **Param-parsing rule**: everything before the first sptxinsight subcommand name (`run`, `ingest`, `verify`, `niche`, ...) is consumed by the wrapper (env control: `--runner`, `--gpu`, `--tmpdir`, `--no-pull`, `--dry-run`). From (and including) the first sptxinsight subcommand name onward, every token is passed through verbatim. Use `--` to force passthrough explicitly.
+- **Default runner**: `native`. Override with `--runner docker`, or set `SPTXINSIGHT_RUNNER=docker` in the environment.
+- **Discovery of sptxinsight subcommands** (for param parsing): cached at `$HOME/.cache/sptxinsight/commands.txt` (TTL `SPTXINSIGHT_COMMANDS_TTL_SECONDS`, default 86400) via `sptxinsight schema --commands-only`. Falls back to a static builtin list if sptxinsight isn't on PATH.
+
 ## insightlib/ is a copy of WSInsight's pipeline layer
 
 - `sptxinsight/insightlib/` was **copied from `wsinsight/insightlib/`**, then patched for

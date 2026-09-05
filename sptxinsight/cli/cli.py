@@ -188,8 +188,34 @@ def _describe_command(name: str, cmd: click.Command) -> dict[str, Any]:
     default=None,
     help="Write the schema JSON to this file instead of stdout.",
 )
-def schema_cmd(output_path: str | None) -> None:
+@click.option(
+    "--commands-only",
+    is_flag=True,
+    default=False,
+    help="Emit only the names of the registered subcommands as a flat JSON "
+    'object: {"commands": [...]}. Cheaper than the full schema for callers '
+    "(e.g. the sptxinsight.sh wrapper) that need to decide whether a "
+    "positional argument is a sptxinsight subcommand without parsing the full "
+    "descriptor.",
+)
+def schema_cmd(output_path: str | None, commands_only: bool) -> None:
     """Emit a machine-readable JSON schema of every sptxinsight subcommand."""
+    if commands_only:
+        payload = json.dumps(
+            {
+                "schema_version": 1,
+                "commands": sorted(
+                    name for name in cli.commands.keys() if name != "schema"
+                ),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        if output_path:
+            Path(output_path).write_text(payload + "\n", encoding="utf-8")
+        else:
+            click.echo(payload)
+        return
     schema: dict[str, Any] = {"schema_version": 1, "commands": {}}
     for name, cmd in cli.commands.items():
         if name == "schema":

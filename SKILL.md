@@ -47,6 +47,83 @@ cohort satisfies this contract before committing to a long run.
 
 ---
 
+## 1.5 Running sptxinsight
+
+**Do not** invoke `sptxinsight` directly, and **do not** construct a `docker run ...` line by hand. Use the unified `./sptxinsight.sh` wrapper in this repo, which manages BOTH runners (native conda env OR docker container):
+
+```
+./sptxinsight.sh run  [--runner {native,docker}]  [--gpu ID|all]  [--tmpdir DIR]  [--no-pull]  [--dry-run]   [SPTXINSIGHT_ARGS ...]
+./sptxinsight.sh status
+./sptxinsight.sh doctor
+./sptxinsight.sh where
+./sptxinsight.sh --help
+```
+
+### Why use the wrapper
+
+- **Single entry point for both runners.** Native (`--runner native`, default) runs `sptxinsight` from the activated conda env with `SPTXINSIGHT_EXPERIMENTAL` already set so experimental subcommands (`hplot`, `hplot-finalize`, `cci`, `agg`) resolve. Docker (`--runner docker`) wraps the same CLI in the `huangchtw/sptxinsight:latest` container, mounts a data dir as `/workspace`, exposes `--gpu`, persists the HF model cache as a named volume (`sptxinsight-hf-cache`), and remaps uid/gid via `docker-entrypoint.sh`.
+- **Why `--runner`, not `-b`/`--backend`**: sptxinsight's CLI has its own global `--backend` flag (selects `anndata|zarr|spatialdata` I/O backend). To avoid overloading that flag, the wrapper uses `--runner` for the orthogonal "where do I run" question.
+- **Argv-parsing rule**: everything before the first sptxinsight subcommand name (`run`, `ingest`, `verify`, `niche`, ...) is consumed by the wrapper. From (and including) the first sptxinsight subcommand name onward, every token is passed through verbatim. Use `--` to force passthrough explicitly.
+- **Always use `--` if uncertain.** Both forms work; the explicit delimiter removes any doubt:
+  - `./sptxinsight.sh run --samples ./samples --results ./results --base-type tumor --target-type lymphocyte` ✓
+  - `./sptxinsight.sh run --samples ./samples -- --backend anndata` ✓ (explicit `--backend anndata` for sptxinsight's own --backend flag)
+
+### Defaults
+
+| Aspect | Default | Override |
+|---|---|---|
+| Runner | `native` | `--runner docker` or `SPTXINSIGHT_RUNNER=docker` |
+| Docker image | `huangchtw/sptxinsight:latest` | `SPTXINSIGHT_IMAGE=...` |
+| HF cache volume | `sptxinsight-hf-cache` | `SPTXINSIGHT_HF_CACHE_VOLUME=...` |
+| Data dir (docker) | unset → wrapper errors | `SPTXINSIGHT_DATA_DIR=/path` (must exist) |
+| `docker pull` (docker) | best-effort at run | `--no-pull` flag |
+| Unknown `-X` flag | warn + passthrough to sptxinsight | `SPTXINSIGHT_STRICT=1` |
+
+### Recipe — single run
+
+1. **Discover the wrapper's absolute path** (so the agent doesn't rely on a hardcoded location):
+
+   ```bash
+   SPTX=$(find /workspace -name sptxinsight.sh -not -path '*/bak_old_scripts/*' 2>/dev/null | head -1)
+   ls -l "$SPT"
+   ```
+
+2. **Pick a runner**:
+   - If `docker info` works AND you want containerized/reproducible runs → `--runner docker`
+   - If the conda env `sptxinsight` is activated → `--runner native` (default)
+   - For multi-sample parallel runs, run multiple `./sptxinsight.sh run ... &` (native) or `for s in samples/*/; do ./sptxinsight.sh --runner docker run ... & done`.
+
+3. **Run a sptxinsight subcommand** (replace `run` with `ingest`, `verify`, `niche`, `niche-profile`, etc.):
+
+   ```bash
+   ./sptxinsight.sh run --samples ./samples --results ./results --base-type tumor --target-type lymphocyte
+   # Or docker equivalent:
+   export SPTXINSIGHT_DATA_DIR=/path/with/samples
+   ./sptxinsight.sh --runner docker --gpu 0 run --samples ./samples --results ./results --base-type tumor --target-type lymphocyte
+   ```
+
+4. **Dry-run first** when the data dir, I/O backend, or GPU choice is uncertain:
+
+   ```bash
+   SPTXINSIGHT_DATA_DIR=/tmp/pretend \
+   ./sptxinsight.sh --runner docker --gpu 1 --tmpdir /scratch --dry-run run --samples ./samples --backend anndata
+   # prints the exact docker run command without executing it
+   ```
+
+### Recipe — diagnose
+
+- **`./sptxinsight.sh where`** → absolute path to the wrapper.
+- **`./sptxinsight.sh status`** → effective configuration: runner, GPU, tmpdir, image, sptxinsight version, pass-through args.
+- **`./sptxinsight.sh doctor`** → preflight. For native: `sptxinsight --version` runs and nvidia-smi is consulted. For docker: daemon reachable, image present locally, HF cache volume exists, GPU passthrough available.
+
+### Decision tree
+
+1. Is `docker info` succeeding? → default to `--runner docker` for reproducible runs.
+2. Else is `sptxinsight --version` succeeding in the activated conda env? → use native (default).
+3. Else run `./sptxinsight.sh doctor` against `native` then `docker` and decide from the printed diagnostics whether to install: `bash ./conda-setup.sh sptxinsight`.
+
+---
+
 ## 2. Assumed Install
 
 Assume `sptxinsight` is already installed, and verify with
