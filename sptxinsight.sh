@@ -19,12 +19,19 @@
 #   inside the container. SPTXINSIGHT_DATA_DIR supplies the same value
 #   non-interactively.
 #
-# Why this script uses --runner instead of -b/--backend:
+# Why this script uses --runner instead of -b/--backend (mirrors the
+# same principle from wsinsight.sh: the wrapper's runner-selector flag must
+# be in a DIFFERENT vocabulary from the inner CLI's own --backend):
 #   sptxinsight's CLI itself has a global --backend flag (anndata, zarr,
 #   spatialdata) that names the I/O backend. The wrapper's job is to select
 #   where the CLI RUNS (native conda env vs docker container); to avoid
 #   overloading sptxinsight's --backend and to keep the two flag spaces
-#   disjoint, the wrapper uses --runner for native|docker.
+#   disjoint, the wrapper uses --runner for native|docker. NOTE that
+#   wsinsight.sh (the same-family wrapper) DOES use '-b' / '--backend' for
+#   its own runner selector, because the wsinsight CLI does NOT have a
+#   global --backend flag. The two wrappers diverge here ON PURPOSE:
+#   never copy '-b' into this file without first removing --backend from
+#   the sptxinsight CLI itself.
 #
 # Param-parsing rule:
 #   Everything before the first sptxinsight subcommand name (run, ingest,
@@ -240,6 +247,21 @@ while [[ $# -gt 0 ]]; do
         status|doctor|where)
             EXTRA_CMD="$1"; shift
             break ;;                       # script's own subcommands (priority)
+        -b)
+            # sptxinsight's CLI has its own global --backend flag, so this
+            # wrapper does NOT claim '-b'. A user typing '-b docker' out of
+            # habit from wsinsight.sh lands here. Surface a clear, named
+            # hint instead of silently forwarding '-b docker ... schema' to
+            # sptxinsight's --backend parser (which would 500 on the
+            # remainder). The next token is the runner name; consume both.
+            if [[ "${SPTXINSIGHT_STRICT:-0}" == "1" ]]; then
+                _die "-b is reserved by sptxinsight's --backend flag; this wrapper's runner selector is --runner (see header)"
+            fi
+            [[ -n "${2:-}" ]] || _die "-b requires a value (e.g. -b docker); NOTE: -b is wsinsight.sh's runner shortcut. This wrapper uses --runner because sptxinsight's CLI has its own --backend flag."
+            _warn "-b is the wsinsight.sh runner shortcut; on this wrapper use --runner $2 (sptxinsight's CLI also accepts --backend, which is why -b cannot be claimed here)."
+            SCRIPT_RUNNER="$2"
+            shift 2
+            ;;
         -*)
             if [[ "${SPTXINSIGHT_STRICT:-0}" == "1" ]]; then
                 _die "unknown option: $1 (SPTXINSIGHT_STRICT=1; known sptxinsight subcommands: ${SPT_CMDS[*]})"

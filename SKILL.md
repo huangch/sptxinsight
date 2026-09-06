@@ -61,8 +61,8 @@ cohort satisfies this contract before committing to a long run.
 
 ### Why use the wrapper
 
-- **Single entry point for both runners.** Native (`--runner native`, default) runs `sptxinsight` from the activated conda env with `SPTXINSIGHT_EXPERIMENTAL` already set so experimental subcommands (`hplot`, `hplot-finalize`, `cci`, `agg`) resolve. Docker (`--runner docker`) wraps the same CLI in the `huangchtw/sptxinsight:latest` container, mounts a data dir as `/workspace`, exposes `--gpu`, persists the HF model cache as a named volume (`sptxinsight-hf-cache`), and remaps uid/gid via `docker-entrypoint.sh`.
-- **Why `--runner`, not `-b`/`--backend`**: sptxinsight's CLI has its own global `--backend` flag (selects `anndata|zarr|spatialdata` I/O backend). To avoid overloading that flag, the wrapper uses `--runner` for the orthogonal "where do I run" question.
+- **Single entry point for both runners.** Native (`--runner native`, default) runs `sptxinsight` from the activated conda env with `SPTXINSIGHT_EXPERIMENTAL` already set so experimental subcommands (`hplot`, `hplot-finalize`, `cci`, `agg`) resolve. Docker (`--runner docker`) wraps the same CLI in the `huangchtw/sptxinsight:latest` container, mounts a data dir as `/workspace`, exposes `--gpu`, persists the HF model cache as a named volume (`sptxinsight-hf-cache`), and remaps uid/gid via `docker-entrypoint.sh`. With `--runner native` via the wrapper, `SPTXINSIGHT_EXPERIMENTAL` is pre-set, so you do NOT need to export it; when invoking `sptxinsight` directly (no wrapper) or via `--runner docker`, you MUST export `SPTXINSIGHT_EXPERIMENTAL=1` yourself to see the experimental commands.
+- **Why `--runner`, not `-b`/`--backend`**: sptxinsight's CLI has its own global `--backend` flag (selects `anndata|zarr|spatialdata` I/O backend). To avoid overloading that flag, the wrapper uses `--runner` for the orthogonal "where do I run" question. (`wsinsight.sh` uses `-b` because that CLI has no `--backend`.) If you type `-b docker` here, the wrapper prints a one-time hint naming `--runner`.
 - **Argv-parsing rule**: everything before the first sptxinsight subcommand name (`run`, `ingest`, `verify`, `niche`, ...) is consumed by the wrapper. From (and including) the first sptxinsight subcommand name onward, every token is passed through verbatim. Use `--` to force passthrough explicitly.
 - **Always use `--` if uncertain.** Both forms work; the explicit delimiter removes any doubt:
   - `./sptxinsight.sh run --samples ./samples --results ./results --base-type tumor --target-type lymphocyte` ✓
@@ -85,7 +85,7 @@ cohort satisfies this contract before committing to a long run.
 
    ```bash
    SPTX=$(find /workspace -name sptxinsight.sh -not -path '*/bak_old_scripts/*' 2>/dev/null | head -1)
-   ls -l "$SPT"
+   ls -l "$SPTX"
    ```
 
 2. **Pick a runner**:
@@ -118,7 +118,7 @@ cohort satisfies this contract before committing to a long run.
 
 ### Decision tree
 
-1. Is `docker info` succeeding? → default to `--runner docker` for reproducible runs.
+1. Is `docker info` succeeding? → prefer `--runner docker` for reproducible runs (the wrapper default remains `native`; docker is the recommended runner when available).
 2. Else is `sptxinsight --version` succeeding in the activated conda env? → use native (default).
 3. Else run `./sptxinsight.sh doctor` against `native` then `docker` and decide from the printed diagnostics whether to install: `bash ./conda-setup.sh sptxinsight`.
 
